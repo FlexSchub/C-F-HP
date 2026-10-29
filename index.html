@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Putzplan F &amp; C</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
+<noscript><p class="note" style="padding:8vh 16px">Diese App braucht JavaScript.</p></noscript>
+
+<main class="authbox" id="authview" hidden>
+  <h1>Putzplan <span class="amp">F &amp; C</span></h1>
+  <p class="authmsg" id="authmsg"></p>
+  <form class="panel" id="loginform" autocomplete="on" hidden>
+    <h2>Anmelden</h2>
+    <label class="fl" for="lemail">E-Mail
+      <input id="lemail" type="email" autocomplete="username" autocapitalize="none" required>
+    </label>
+    <label class="fl" for="lpass">Passwort
+      <input id="lpass" type="password" autocomplete="current-password" required>
+    </label>
+    <p class="autherr" id="loginerr" role="alert"></p>
+    <div class="row">
+      <button class="primary" type="submit" id="loginbtn">Anmelden</button>
+      <button class="linkbtn" type="button" id="resetpw">Passwort vergessen</button>
+    </div>
+  </form>
+  <form class="panel" id="recform" autocomplete="off" hidden>
+    <h2>Neues Passwort festlegen</h2>
+    <label class="fl" for="rpass">Neues Passwort (mindestens 10 Zeichen)
+      <input id="rpass" type="password" autocomplete="new-password" minlength="10" required>
+    </label>
+    <label class="fl" for="rpass2">Noch einmal
+      <input id="rpass2" type="password" autocomplete="new-password" minlength="10" required>
+    </label>
+    <p class="autherr" id="recerr" role="alert"></p>
+    <div class="row"><button class="primary" type="submit" id="recbtn">Passwort speichern</button></div>
+  </form>
+  <div class="panel" id="setupbox" hidden>
+    <h2>Noch nicht eingerichtet</h2>
+    <p class="fair">Diese App ist noch nicht mit eurem Speicher verbunden. Trag die Supabase-Daten in die Datei js/config.js ein. Die Schritte stehen in der Anleitung (ANLEITUNG-SUPABASE.html).</p>
+  </div>
+</main>
+
+<main class="app" id="appview" hidden>
+  <header class="top">
+    <div class="brand">
+      <h1>Putzplan <span class="amp">F &amp; C</span></h1>
+      <span class="date" id="today"></span>
+    </div>
+    <nav class="tabs" aria-label="Bereiche">
+      <button class="tab" type="button" id="tabputz" aria-current="page">Putzplan</button>
+      <button class="tab" type="button" id="tabshop">Einkauf</button>
+      <button class="tab" type="button" id="tabcook">Kochbuch</button>
+      <button class="tab" type="button" id="tabmeal">Essensplan</button>
+      <button class="tab" type="button" id="tabspend">Ausgaben</button>
+    </nav>
+  </header>
+
+  <div class="col" id="putzview">
+  <div class="seg viewseg" id="view" role="group" aria-label="Ansicht">
+    <button type="button" data-v="plan" aria-pressed="true">Plan</button>
+    <button type="button" data-v="stats" aria-pressed="false">Statistik</button>
+  </div>
+
+  <div class="col" id="planview">
+    <section class="summary" aria-live="polite">
+      <p class="headline" id="headline">Putzplan wird geladen …</p>
+      <div class="share" id="share" hidden>
+        <div class="share-label"><span class="lf">F <b id="nf">0</b></span><span>Wer hat wie oft geputzt</span><span class="lc">C <b id="nc">0</b></span></div>
+        <div class="bar" role="img" aria-label="Verteilung der erledigten Aufgaben"><span class="bf" id="bf"></span><span class="bc" id="bc"></span></div>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <div class="seg-group">
+        <span class="seg-label" id="melabel">Ich bin</span>
+        <div class="seg" id="me" role="group" aria-labelledby="melabel">
+          <button type="button" class="pf" data-v="F" aria-pressed="false">F</button>
+          <button type="button" class="pc" data-v="C" aria-pressed="false">C</button>
+        </div>
+      </div>
+      <div class="seg-group">
+        <span class="seg-label" id="flabel">Zeigen</span>
+        <div class="seg" id="filter" role="group" aria-labelledby="flabel">
+          <button type="button" data-v="alle" aria-pressed="true">Alle</button>
+          <button type="button" class="pf" data-v="F" aria-pressed="false">F</button>
+          <button type="button" class="pc" data-v="C" aria-pressed="false">C</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="banner"></div>
+    <div id="list" style="display:flex;flex-direction:column;gap:18px"></div>
+
+    <details class="add" id="addbox">
+      <summary>Aufgabe hinzufügen</summary>
+      <form class="add" id="addform" autocomplete="off">
+        <label class="wide" for="newname">Was ist zu tun?
+          <input id="newname" type="text" maxlength="80" placeholder="z. B. Backofen reinigen" required>
+        </label>
+        <label for="newroom">Bereich
+          <select id="newroom"></select>
+        </label>
+        <label for="newint">Wie oft?
+          <select id="newint"></select>
+        </label>
+        <label for="newwho">Zuständig
+          <select id="newwho">
+            <option value="F">F</option>
+            <option value="C">C</option>
+            <option value="abwechselnd">Abwechselnd</option>
+          </select>
+        </label>
+        <label for="newstart">Erste Fälligkeit
+          <select id="newstart">
+            <option value="now">Heute</option>
+            <option value="later">Nach einem Intervall</option>
+          </select>
+        </label>
+        <div class="wide"><button class="primary" type="submit">Hinzufügen</button></div>
+      </form>
+    </details>
+  </div>
+
+  <section class="col" id="statsview" hidden>
+    <div class="toolbar">
+      <div class="seg-group">
+        <span class="seg-label" id="plabel">Zeitraum</span>
+        <div class="seg" id="period" role="group" aria-labelledby="plabel">
+          <button type="button" data-v="7" aria-pressed="false">7 Tage</button>
+          <button type="button" data-v="30" aria-pressed="true">30 Tage</button>
+          <button type="button" data-v="all" aria-pressed="false">Gesamt</button>
+        </div>
+      </div>
+    </div>
+    <div class="col" id="stats"></div>
+  </section>
+  </div>
+
+  <section class="col" id="shopview" hidden>
+    <p class="headline" id="shophead" aria-live="polite">Einkaufsliste wird geladen …</p>
+    <div class="stores" id="stores" role="group" aria-label="Läden"></div>
+
+    <form class="quick" id="quickform" autocomplete="off" hidden>
+      <input id="quickname" type="text" list="knownitems" maxlength="120" enterkeyhint="done" autocapitalize="sentences" aria-label="Artikel hinzufügen" placeholder="Artikel hinzufügen …">
+      <button class="primary" type="submit">Hinzufügen</button>
+    </form>
+    <datalist id="knownitems"></datalist>
+
+    <form class="panel" id="storeform" autocomplete="off" hidden>
+      <h2 id="storetitle">Neuer Laden</h2>
+      <input id="newstore" type="text" maxlength="40" placeholder="z. B. Aldi" aria-label="Name des Ladens" required>
+      <div class="row">
+        <button class="primary" type="submit">Anlegen</button>
+        <button class="linkbtn" type="button" id="storecancel">Abbrechen</button>
+      </div>
+    </form>
+
+    <div class="col" id="shopbody"></div>
+  </section>
+
+  <section class="col" id="cookview" hidden>
+    <div class="col" id="cooklist">
+      <div class="seg viewseg" id="cookseg" role="group" aria-label="Ansicht Kochbuch">
+        <button type="button" data-v="menu" aria-pressed="true">Speisekarte</button>
+        <button type="button" data-v="stats" aria-pressed="false">Statistik</button>
+      </div>
+      <div class="col" id="cookstats" hidden></div>
+      <div class="cookhead" id="cookheadrow">
+        <p class="headline" id="cookhead">Kochbuch wird geladen …</p>
+        <button class="primary" type="button" id="newrecipe">+ Gericht</button>
+      </div>
+      <div class="col" id="cookmain"></div>
+      <div class="pickbar" id="pickbar" hidden>
+        <span id="pickcount">0 Gerichte gewählt</span>
+        <div class="row">
+          <button class="linkbtn" type="button" id="pickclear">Leeren</button>
+          <button class="linkbtn" type="button" id="pickplan">In den Plan</button>
+          <button class="primary" type="button" id="pickgo">Weiter</button>
+        </div>
+      </div>
+    </div>
+    <div class="col" id="cookpanel" hidden></div>
+    <div class="col" id="recform" hidden></div>
+  </section>
+
+  <section class="col" id="mealview" hidden>
+    <p class="headline" id="mealhead" aria-live="polite">Essensplan wird geladen …</p>
+    <div class="weeknav">
+      <button class="linkbtn" type="button" id="weekprev" aria-label="Vorherige Woche">‹</button>
+      <span class="wl" id="weeklabel"></span>
+      <button class="linkbtn" type="button" id="weeknext" aria-label="Nächste Woche">›</button>
+      <button class="linkbtn" type="button" id="weektoday">Diese Woche</button>
+    </div>
+    <div class="col" id="mealdays" style="gap:10px"></div>
+    <button class="primary" type="button" id="mealshop" hidden>Zutaten einkaufen</button>
+  </section>
+
+  <section class="col" id="spendview" hidden>
+    <p class="headline" id="spendhead" aria-live="polite">Ausgaben werden geladen …</p>
+    <div id="spendbanner"></div>
+    <div class="row" id="budgetbar" hidden>
+      <select id="budgetsel" aria-label="Budget wählen"></select>
+      <button class="linkbtn" type="button" id="budgetedit">Bearbeiten</button>
+      <button class="linkbtn" type="button" id="budgetnew">+ Neues Budget</button>
+    </div>
+
+    <form class="panel" id="budgetform" autocomplete="off" hidden>
+      <h2 id="budgettitle">Neues Budget</h2>
+      <label class="fl" for="bname">Name (optional)
+        <input id="bname" type="text" maxlength="40" placeholder="z. B. November">
+      </label>
+      <div class="two">
+        <label class="fl" for="bstart">Von
+          <input id="bstart" type="date" required>
+        </label>
+        <label class="fl" for="bend">Bis
+          <input id="bend" type="date" required>
+        </label>
+      </div>
+      <label class="fl" for="bamount">Budget in Euro
+        <input id="bamount" type="text" inputmode="decimal" placeholder="z. B. 400" required>
+      </label>
+      <div class="row">
+        <button class="primary" type="submit">Speichern</button>
+        <button class="linkbtn" type="button" id="budgetcancel">Abbrechen</button>
+        <button class="linkbtn" type="button" id="budgetdel" hidden>Budget löschen</button>
+      </div>
+    </form>
+
+    <div class="col" id="spendsum"></div>
+
+    <form class="panel" id="spendform" autocomplete="off" hidden>
+      <h2>Ausgabe eintragen</h2>
+      <div class="two">
+        <label class="fl" for="samount">Betrag in Euro
+          <input id="samount" type="text" inputmode="decimal" placeholder="z. B. 12,50" required>
+        </label>
+        <label class="fl" for="scat">Kategorie
+          <input id="scat" type="text" list="catlist" maxlength="30" placeholder="z. B. Lebensmittel">
+        </label>
+      </div>
+      <datalist id="catlist"></datalist>
+      <div class="two">
+        <label class="fl" for="splace">Ort
+          <input id="splace" type="text" maxlength="40" placeholder="z. B. Aldi">
+        </label>
+        <label class="fl" for="swhat">Was gekauft
+          <input id="swhat" type="text" maxlength="80" placeholder="z. B. Wocheneinkauf">
+        </label>
+      </div>
+      <label class="fl" for="sdate">Datum
+        <input id="sdate" type="date" required>
+      </label>
+      <div class="row"><button class="primary" type="submit">Ausgabe hinzufügen</button></div>
+    </form>
+
+    <div class="col" id="spendlist"></div>
+    <div class="col" id="spendcats"></div>
+  </section>
+  <details class="add" id="settingsbox">
+    <summary>Einstellungen und Daten</summary>
+    <div class="setbody">
+      <p class="meta">Angemeldet als <b id="whoami"></b></p>
+      <div class="row">
+        <button class="linkbtn" type="button" id="doexport">Daten exportieren</button>
+        <button class="linkbtn" type="button" id="doimport">Daten importieren</button>
+        <input type="file" id="importfile" accept="application/json,.json" hidden>
+      </div>
+      <div id="importconfirm" class="banner" hidden></div>
+      <div class="row">
+        <button class="linkbtn" type="button" id="doexample">Beispieldaten laden</button>
+        <button class="linkbtn" type="button" id="dologout">Abmelden</button>
+      </div>
+      <div id="setstatus" class="meta" role="status"></div>
+      <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste.</p>
+    </div>
+  </details>
+</main>
+
+<div class="toast" id="toast" hidden><div class="toast-in"><span id="toasttext"></span><button type="button" id="toastbtn" hidden></button></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
+<script src="js/config.js"></script>
+<script src="js/store-supabase.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
