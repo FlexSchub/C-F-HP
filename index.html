@@ -31,7 +31,7 @@
       <button class="linkbtn" type="button" id="resetpw">Passwort vergessen</button>
     </div>
   </form>
-  <form class="panel" id="recform" autocomplete="off" hidden>
+  <form class="panel" id="pwform" autocomplete="off" hidden>
     <h2>Neues Passwort festlegen</h2>
     <label class="fl" for="rpass">Neues Passwort (mindestens 10 Zeichen)
       <input id="rpass" type="password" autocomplete="new-password" minlength="10" required>
@@ -59,6 +59,7 @@
       <button class="tab" type="button" id="tabshop">Einkauf</button>
       <button class="tab" type="button" id="tabcook">Kochbuch</button>
       <button class="tab" type="button" id="tabmeal">Essensplan</button>
+      <button class="tab" type="button" id="tabcal">Kalender</button>
       <button class="tab" type="button" id="tabspend">Ausgaben</button>
     </nav>
   </header>
@@ -111,14 +112,27 @@
         <label for="newint">Wie oft?
           <select id="newint"></select>
         </label>
+        <div class="wide custom" id="newcustom" hidden>
+          <span>Alle</span>
+          <input id="newn" type="number" min="1" max="999" inputmode="numeric" value="2" aria-label="Anzahl">
+          <select id="newunit" aria-label="Einheit">
+            <option value="d">Tage</option>
+            <option value="w" selected>Wochen</option>
+            <option value="m">Monate</option>
+          </select>
+        </div>
         <label for="newwho">Zuständig
           <select id="newwho">
             <option value="F">F</option>
             <option value="C">C</option>
             <option value="abwechselnd">Abwechselnd</option>
+            <option value="egal">Egal wer</option>
           </select>
         </label>
-        <label for="newstart">Erste Fälligkeit
+        <label for="newpoints">Punkte
+          <input id="newpoints" type="number" min="1" max="10" step="1" value="1" inputmode="numeric">
+        </label>
+        <label for="newstart" id="newstartlbl">Erste Fälligkeit
           <select id="newstart">
             <option value="now">Heute</option>
             <option value="later">Nach einem Intervall</option>
@@ -203,6 +217,99 @@
     <button class="primary" type="button" id="mealshop" hidden>Zutaten einkaufen</button>
   </section>
 
+  <section class="col" id="calview" hidden>
+    <p class="headline" id="calhead" aria-live="polite">Kalender wird geladen …</p>
+    <form class="panel" id="evform" autocomplete="off" hidden>
+      <h2 id="evformtitle">Neuer Termin</h2>
+      <label class="fl" for="evtitle">Was ist los?
+        <input id="evtitle" type="text" maxlength="80" placeholder="z. B. Zahnarzt" required>
+      </label>
+      <label class="fl" for="evwho">Für wen?
+        <select id="evwho">
+          <option value="F">F</option>
+          <option value="C">C</option>
+          <option value="B">Gemeinsam</option>
+        </select>
+      </label>
+      <div class="two">
+        <label class="fl" for="evdate">Datum
+          <input id="evdate" type="date" required>
+        </label>
+        <label class="fl" for="evend">Bis (nur bei mehreren Tagen)
+          <input id="evend" type="date">
+        </label>
+      </div>
+      <label class="chk" for="evall"><input id="evall" type="checkbox" checked> Ganztägig</label>
+      <div class="two" id="evtimes" hidden>
+        <label class="fl" for="evstart">Von
+          <input id="evstart" type="time">
+        </label>
+        <label class="fl" for="evfinish">Bis (optional)
+          <input id="evfinish" type="time">
+        </label>
+      </div>
+      <label class="fl" for="evplace">Ort (optional)
+        <input id="evplace" type="text" maxlength="60">
+      </label>
+      <label class="fl" for="evnote">Notiz (optional)
+        <input id="evnote" type="text" maxlength="200">
+      </label>
+      <div class="row">
+        <button class="primary" type="submit">Speichern</button>
+        <button class="linkbtn" type="button" id="evcancel">Abbrechen</button>
+        <button class="linkbtn" type="button" id="evdel" hidden>Termin löschen</button>
+      </div>
+    </form>
+    <div class="col" id="calmain">
+      <div class="seg viewseg" id="calmode" role="group" aria-label="Ansicht Kalender">
+        <button type="button" data-v="month" aria-pressed="true">Monat</button>
+        <button type="button" data-v="week" aria-pressed="false">Woche</button>
+      </div>
+      <div class="weeknav">
+        <button class="linkbtn" type="button" id="calprev" aria-label="Zurück">‹</button>
+        <span class="wl" id="callabel"></span>
+        <button class="linkbtn" type="button" id="calnext" aria-label="Weiter">›</button>
+        <button class="linkbtn" type="button" id="caltoday">Heute</button>
+      </div>
+      <div class="calkey" aria-label="Farben"><span><i class="F"></i>F</span><span><i class="C"></i>C</span><span><i class="B"></i>Gemeinsam</span></div>
+      <div class="col" id="calgrid"></div>
+      <div class="col" id="caldet"></div>
+      <details class="add" id="icsbox">
+        <summary>Kalender-Dateien (.ics) importieren und exportieren</summary>
+        <div class="icsin">
+          <h3>Importieren</h3>
+          <p class="fair">Exportiere in deiner Kalender-App eine .ics-Datei (Fossify Calendar: Einstellungen → Termine exportieren; Google Calendar: Einstellungen → Importieren &amp; Exportieren → Exportieren) und wähle sie hier aus.</p>
+          <label class="fl" for="icswho">Die importierten Termine gehören zu
+            <select id="icswho">
+              <option value="F">F</option>
+              <option value="C">C</option>
+              <option value="B">Gemeinsam</option>
+            </select>
+          </label>
+          <label class="chk" for="icspast"><input id="icspast" type="checkbox"> Auch vergangene Termine importieren (sonst nur ab 30 Tagen zurück)</label>
+          <div class="row"><button class="primary" type="button" id="icspick">.ics-Datei wählen …</button></div>
+          <input type="file" id="icsfile" accept=".ics,text/calendar" hidden>
+          <div id="icsconfirm" hidden></div>
+          <h3>Exportieren</h3>
+          <label class="fl" for="icsexwho">Welche Termine?
+            <select id="icsexwho">
+              <option value="all">Alle</option>
+              <option value="F">Nur F</option>
+              <option value="C">Nur C</option>
+              <option value="B">Nur gemeinsame</option>
+            </select>
+          </label>
+          <div class="row">
+            <button class="primary" type="button" id="icsexport">Als .ics-Datei speichern</button>
+            <button class="linkbtn" type="button" id="icsclear">Alle importierten Termine löschen</button>
+          </div>
+          <p class="meta" id="icsstatus" role="status"></p>
+          <p class="foot">Das ist ein Datei-Austausch und kein automatischer Abgleich. Änderungen in deiner Kalender-App kommen erst an, wenn du erneut importierst.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
   <section class="col" id="spendview" hidden>
     <p class="headline" id="spendhead" aria-live="polite">Ausgaben werden geladen …</p>
     <div id="spendbanner"></div>
@@ -228,6 +335,7 @@
       <label class="fl" for="bamount">Budget in Euro
         <input id="bamount" type="text" inputmode="decimal" placeholder="z. B. 400" required>
       </label>
+      <label class="chk" for="brepeat"><input id="brepeat" type="checkbox"> Nach Ablauf automatisch wiederholen (gleicher Betrag, gleiche Dauer)</label>
       <div class="row">
         <button class="primary" type="submit">Speichern</button>
         <button class="linkbtn" type="button" id="budgetcancel">Abbrechen</button>
@@ -256,9 +364,19 @@
           <input id="swhat" type="text" maxlength="80" placeholder="z. B. Wocheneinkauf">
         </label>
       </div>
-      <label class="fl" for="sdate">Datum
-        <input id="sdate" type="date" required>
-      </label>
+      <div class="two">
+        <label class="fl" for="sdate">Datum
+          <input id="sdate" type="date" required>
+        </label>
+        <label class="fl" for="srepeat">Wiederkehrend?
+          <select id="srepeat">
+            <option value="">Nein, einmalig</option>
+            <option value="week">Jede Woche</option>
+            <option value="month">Jeden Monat</option>
+            <option value="year">Jedes Jahr</option>
+          </select>
+        </label>
+      </div>
       <div class="row"><button class="primary" type="submit">Ausgabe hinzufügen</button></div>
     </form>
 

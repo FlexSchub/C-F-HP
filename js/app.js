@@ -16,13 +16,18 @@
   var filter = lsGet("pp-filter");
   if (filter !== "F" && filter !== "C") filter = "alle";
   var open = {};
+  var editing = {};
   var confirmDel = null;
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
   var toastTimer = null;
   var sv = lsGet("pp-section");
-  var section = sv === "shop" || sv === "cook" || sv === "meal" || sv === "spend" ? sv : "putz";
+  var section = sv === "shop" || sv === "cook" || sv === "meal" || sv === "cal" || sv === "spend" ? sv : "putz";
+  var events = [], eventsLoaded = false;
+  var calMode = lsGet("pp-calmode") === "week" ? "week" : "month";
+  var calAnchor = 0, calSel = 0;      // Tage seit 1970 (werden unten gesetzt)
+  var evDraft = null, confirmEvDel = false;
   var budgets = null;        // null = lädt noch
   var spends = [];
   var curBudget = lsGet("pp-budget");
@@ -76,7 +81,46 @@
   function fmt(s) { var p = s.split("-"); return p[2] + "." + p[1] + "."; }
   function weekStart(n) { return n - ((n + 3) % 7); }   // Montag
   function dayLabel(n) { var d = new Date(n * 864e5); return pad(d.getUTCDate()) + "." + pad(d.getUTCMonth() + 1) + "."; }
-  function intervalLabel(n) { for (var i = 0; i < INTERVALS.length; i++) if (INTERVALS[i][0] === n) return INTERVALS[i][1]; return "alle " + n + " Tage"; }
+  var DEMAND = 1e9;   // Sortierwert für Aufgaben ohne Rhythmus
+  function intervalLabel(n) {
+    if (n === 0) return "nach Bedarf";
+    for (var i = 0; i < INTERVALS.length; i++) if (INTERVALS[i][0] === n) return INTERVALS[i][1];
+    if (n % 30 === 0) return "alle " + (n / 30) + " Monate";
+    if (n % 7 === 0) return "alle " + (n / 7) + " Wochen";
+    return "alle " + n + " Tage";
+  }
+  /* Punkte: jede Aufgabe zählt 1 Punkt, wenn nichts anderes eingestellt ist */
+  function pointsOf(x) { var n = Math.round(Number(x && x.points)); return n >= 1 ? Math.min(n, 10) : 1; }
+  function readPoints(el) {
+    var n = Number(String(el.value).replace(",", "."));
+    return isFinite(n) && n >= 1 && n <= 10 && Math.floor(n) === n ? n : null;
+  }
+  function isDemand(t) { return t.intervalDays === 0 || t.intervalDays === "0"; }
+  /* Eigene Abstände: Zahl + Einheit -> Tage (oder null, wenn ungültig) */
+  function customDays(n, unit) {
+    n = Math.floor(Number(n));
+    if (!isFinite(n) || n < 1) return null;
+    var d = n * (unit === "m" ? 30 : unit === "w" ? 7 : 1);
+    return d > 3650 ? null : d;
+  }
+  function readInterval(sel, nEl, unitEl) {
+    if (sel.value === "demand") return 0;
+    if (sel.value === "custom") return customDays(nEl.value, unitEl.value);
+    return Number(sel.value);
+  }
+  function intervalOptions(sel, current) {
+    var known = false;
+    INTERVALS.forEach(function (i) { if (i[0] === current) known = true; });
+    INTERVALS.forEach(function (i) { sel.append(h("option", { value: String(i[0]) }, i[1])); });
+    sel.append(h("option", { value: "custom" }, "Eigener Abstand …"));
+    sel.append(h("option", { value: "demand" }, "Nach Bedarf (kein Rhythmus)"));
+    sel.value = current === 0 ? "demand" : known ? String(current) : "custom";
+  }
+  function agoText(last) {
+    if (!last) return "Noch nie erledigt";
+    var d = dn(todayStr()) - dn(last);
+    return d <= 0 ? "Heute erledigt" : d === 1 ? "Zuletzt gestern" : "Zuletzt vor " + d + " Tagen";
+  }
   function dueText(d) {
     if (d < -1) return "seit " + (-d) + " Tagen überfällig";
     if (d === -1) return "seit gestern überfällig";
@@ -86,9 +130,11 @@
   }
   function info(t) {
     var today = dn(todayStr());
+    var who = t.assignee === "egal" ? "egal"
+      : t.assignee === "abwechselnd" ? (t.turn === "C" ? "C" : "F") : (t.assignee === "C" ? "C" : "F");
+    if (isDemand(t)) return { d: DEMAND, who: who, demand: true };
     var days = Number(t.intervalDays) || 7;
     var due = t.lastDone ? dn(t.lastDone) + days : today;
-    var who = t.assignee === "abwechselnd" ? (t.turn === "C" ? "C" : "F") : (t.assignee === "C" ? "C" : "F");
     return { d: due - today, who: who };
   }
 
@@ -108,7 +154,8 @@
   function hideToast() { $("toast").hidden = true; }
   function writeFail(e) {
     var code = e && e.code ? String(e.code) : "";
-    if (code === "permission-denied") toast("Kein Zugriff zum Speichern. Melde dich ab und wieder an. Falls das bleibt, prüfe die Sicherheitsregeln (Anleitung).", null, null, true);
+    if (code === "23514") toast("Das wurde von der Datenbank abgelehnt. Falls das im Kalender passiert: Das einmalige Datenbank-Update fehlt noch (Anleitung „Update Kalender“).", null, null, true);
+    else if (code === "permission-denied") toast("Kein Zugriff zum Speichern. Melde dich ab und wieder an. Falls das bleibt, prüfe die Sicherheitsregeln (Anleitung).", null, null, true);
     else if (code === "unavailable") toast("Keine Verbindung. Versuch es gleich noch einmal.");
     else toast("Speichern hat nicht geklappt" + (code ? " (" + code + ")" : "") + ". Versuch es gleich noch einmal.");
   }
@@ -152,12 +199,13 @@
       countC: prev.countC + (me === "C" ? 1 : 0),
       turn: t.assignee === "abwechselnd" ? (me === "F" ? "C" : "F") : ""
     };
+    var demand = isDemand(t);
     var ref = db.doc("tasks/" + t.id);
     var lref = db.collection("log").doc();
-    var entry = { taskId: t.id, task: t.name, room: t.room || "Überall", by: me, date: todayStr(), at: Date.now() };
+    var entry = { taskId: t.id, task: t.name, room: t.room || "Überall", by: me, date: todayStr(), at: Date.now(), points: pointsOf(t) };
     Promise.all([ref.update(next), lref.set(entry)]).then(function () {
       var days = Number(t.intervalDays) || 7;
-      toast("„" + t.name + "“ erledigt. Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + ".", "Rückgängig", function () {
+      toast("„" + t.name + "“ erledigt." + (demand ? "" : " Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + "."), "Rückgängig", function () {
         Promise.all([ref.update(prev), lref.delete()]).catch(writeFail);
       });
     }).catch(writeFail);
@@ -177,10 +225,12 @@
   /* Darstellung: Plan */
   function row(t) {
     var inf = info(t);
-    var status = inf.d < 0 ? "late" : inf.d === 0 ? "today" : "ok";
+    var status = inf.demand ? "ok" : inf.d < 0 ? "late" : inf.d === 0 ? "today" : "ok";
     var isOpen = !!open[t.id];
     var metaParts = [t.room || "Überall", intervalLabel(Number(t.intervalDays))];
     if (t.assignee === "abwechselnd") metaParts.push("abwechselnd");
+    if (t.assignee === "egal") metaParts.push("egal wer");
+    if (pointsOf(t) > 1) metaParts.push(pointsOf(t) + " Punkte");
     var li = h("li", { class: "task" });
     var check = h("button", { class: "check", type: "button", "aria-label": "Erledigt: " + t.name, onclick: function () { markDone(t); } });
     check.innerHTML = CHECK;
@@ -190,8 +240,8 @@
     } }, t.name);
     li.append(
       check,
-      h("div", { class: "body" }, title, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", { class: "due " + status }, dueText(inf.d))),
-      h("span", { class: "chip " + inf.who, title: "Zuständig: " + inf.who, "aria-label": "Zuständig: " + inf.who }, inf.who)
+      h("div", { class: "body" }, title, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", { class: "due " + status }, inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
+      h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who)
     );
     if (isOpen) {
       var last = t.lastDone ? "Zuletzt erledigt von " + (t.lastBy || "?") + " am " + fmt(t.lastDone) + "." : "Noch nie erledigt.";
@@ -202,11 +252,48 @@
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = null; render(); } }, "Abbrechen")
         );
       } else {
-        actions.append(h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = t.id; render(); } }, "Aufgabe löschen"));
+        actions.append(
+          h("button", { class: "linkbtn", type: "button", onclick: function () { editing[t.id] = !editing[t.id]; render(); } }, editing[t.id] ? "Ändern schließen" : "Rhythmus ändern"),
+          h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = t.id; render(); } }, "Aufgabe löschen"));
       }
-      li.append(h("div", { class: "more" }, h("div", null, last), actions));
+      li.append(h("div", { class: "more" }, h("div", null, last), editing[t.id] ? editForm(t) : null, actions));
     }
     return li;
+  }
+
+  function editForm(t) {
+    var sel = h("select", { "aria-label": "Wie oft?" });
+    var n = h("input", { type: "number", min: "1", max: "999", inputmode: "numeric", "aria-label": "Anzahl" });
+    var unit = h("select", { "aria-label": "Einheit" }, h("option", { value: "d" }, "Tage"), h("option", { value: "w" }, "Wochen"), h("option", { value: "m" }, "Monate"));
+    var cur = isDemand(t) ? 0 : (Number(t.intervalDays) || 7);
+    intervalOptions(sel, cur);
+    if (sel.value === "custom") {
+      if (cur % 30 === 0) { n.value = cur / 30; unit.value = "m"; }
+      else if (cur % 7 === 0) { n.value = cur / 7; unit.value = "w"; }
+      else { n.value = cur; unit.value = "d"; }
+    } else { n.value = "2"; unit.value = "w"; }
+    var cust = h("div", { class: "custom" }, "alle ", n, unit);
+    var who = h("select", { "aria-label": "Zuständig" },
+      h("option", { value: "F" }, "F"), h("option", { value: "C" }, "C"),
+      h("option", { value: "abwechselnd" }, "Abwechselnd"), h("option", { value: "egal" }, "Egal wer"));
+    who.value = t.assignee || "F";
+    var pts = h("input", { type: "number", min: "1", max: "10", step: "1", inputmode: "numeric", "aria-label": "Punkte", value: String(pointsOf(t)) });
+    var err = h("p", { class: "autherr", role: "alert" });
+    function sync() { cust.hidden = sel.value !== "custom"; n.disabled = sel.value !== "custom"; }
+    sel.addEventListener("change", sync); sync();
+    return h("form", { class: "editbox", onsubmit: function (e) {
+      e.preventDefault();
+      var days = readInterval(sel, n, unit);
+      if (days === null) { err.textContent = "Bitte eine Zahl von 1 bis 999 eingeben (höchstens 10 Jahre)."; return; }
+      var pv = readPoints(pts);
+      if (pv === null) { err.textContent = "Punkte: bitte eine ganze Zahl von 1 bis 10."; return; }
+      var upd = { intervalDays: days, assignee: who.value, points: pv };
+      if (who.value === "abwechselnd") upd.turn = t.turn === "C" ? "C" : "F"; else upd.turn = "";
+      db.doc("tasks/" + t.id).update(upd).then(function () { editing[t.id] = false; toast("Gespeichert."); }).catch(writeFail);
+    } },
+      h("label", null, "Wie oft?", sel), cust,
+      h("label", null, "Zuständig", who), h("label", null, "Punkte (wie anstrengend ist die Aufgabe?)", pts), err,
+      h("button", { class: "primary", type: "submit" }, "Speichern"));
   }
 
   function renderSummary() {
@@ -261,7 +348,7 @@
       return;
     }
     var shown = tasks.map(function (t) { var i = info(t); return { t: t, d: i.d, who: i.who }; })
-      .filter(function (x) { return filter === "alle" || x.who === filter; })
+      .filter(function (x) { return filter === "alle" || x.who === filter || x.who === "egal"; })
       .sort(function (a, b) { return a.d - b.d || String(a.t.name).localeCompare(String(b.t.name), "de"); });
     if (!shown.length) {
       list.append(h("p", { class: "note" }, "Für " + filter + " ist gerade nichts eingetragen."));
@@ -270,7 +357,8 @@
     var groups = [
       ["Heute und überfällig", function (d) { return d <= 0; }],
       ["Diese Woche", function (d) { return d >= 1 && d <= 7; }],
-      ["Später", function (d) { return d > 7; }]
+      ["Später", function (d) { return d > 7 && d < DEMAND; }],
+      ["Nach Bedarf", function (d) { return d >= DEMAND; }]
     ];
     groups.forEach(function (g) {
       var items = shown.filter(function (x) { return g[1](x.d); });
@@ -294,11 +382,11 @@
         h("span", null, "Sobald ihr Aufgaben abhakt, seht ihr hier, wer wie viel übernimmt. Die Zählung beginnt mit dem ersten Abhaken.")));
       return;
     }
-    var f = 0, c = 0, rooms = {};
+    var f = 0, c = 0, rooms = {}, fp = 0, cp = 0;
     items.forEach(function (l) {
       var r = l.room || "Überall";
       if (!rooms[r]) rooms[r] = { F: 0, C: 0 };
-      if (l.by === "C") { c++; rooms[r].C++; } else { f++; rooms[r].F++; }
+      if (l.by === "C") { c++; cp += pointsOf(l); rooms[r].C++; } else { f++; fp += pointsOf(l); rooms[r].F++; }
     });
     var total = f + c;
     var pf = Math.round(f / total * 100), pc = 100 - pf;
@@ -313,6 +401,19 @@
       h("div", { class: "bar", role: "img", "aria-label": "F " + pf + " Prozent, C " + pc + " Prozent" },
         h("span", { class: "bf", style: "width:" + pf + "%" }), h("span", { class: "bc", style: "width:" + pc + "%" })),
       h("p", { class: "fair" }, fairText)));
+
+    var ptotal = fp + cp;
+    var ppf = Math.round(fp / ptotal * 100), ppc = 100 - ppf;
+    var pfair = fp === cp ? "Nach Punkten teilt ihr euch die Arbeit gleichmäßig auf."
+      : (fp > cp ? "F" : "C") + " hat " + Math.max(ppf, ppc) + " % der Punkte gesammelt. Schwere Aufgaben zählen mehr.";
+    box.append(h("div", { class: "panel" },
+      h("h2", null, ptotal + (ptotal === 1 ? " Punkt gesammelt" : " Punkte gesammelt")),
+      h("div", { class: "duo" },
+        h("div", { class: "who F" }, h("span", { class: "num" }, String(fp)), h("span", { class: "lbl" }, "F · " + ppf + " %")),
+        h("div", { class: "who C" }, h("span", { class: "num" }, String(cp)), h("span", { class: "lbl" }, "C · " + ppc + " %"))),
+      h("div", { class: "bar", role: "img", "aria-label": "Punkte: F " + ppf + " Prozent, C " + ppc + " Prozent" },
+        h("span", { class: "bf", style: "width:" + ppf + "%" }), h("span", { class: "bc", style: "width:" + ppc + "%" })),
+      h("p", { class: "fair" }, pfair)));
 
     /* letzte 8 Wochen, unabhängig vom gewählten Zeitraum */
     var w0 = weekStart(today) - 49;
@@ -361,7 +462,7 @@
     var ul = h("ul", { class: "recent" });
     recent.forEach(function (l) {
       var who = l.by === "C" ? "C" : "F";
-      ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, l.task || "Aufgabe"), h("span", { class: "rd" }, fmt(l.date))));
+      ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, (l.task || "Aufgabe") + (pointsOf(l) > 1 ? " · " + pointsOf(l) + " P." : "")), h("span", { class: "rd" }, fmt(l.date))));
     });
     box.append(h("div", { class: "panel" }, h("h2", null, "Zuletzt erledigt"), ul));
     box.append(h("p", { class: "foot" }, "Gezählt wird ab dem ersten Abhaken in dieser Version."));
@@ -524,6 +625,9 @@
     $("recform").hidden = m !== "edit";
     try { window.scrollTo(0, 0); } catch (e) {}
   }
+  function effortText(n) { n = Math.round(Number(n)); if (!(n >= 1 && n <= 5)) return ""; return "●".repeat(n) + "○".repeat(5 - n); }
+  var EFFORT_NAMES = ["", "sehr leicht", "leicht", "mittel", "aufwendig", "sehr aufwendig"];
+  function minutesText(m) { m = Math.round(Number(m)); if (!(m >= 1)) return ""; return m >= 60 ? Math.floor(m / 60) + " Std" + (m % 60 ? " " + (m % 60) + " Min" : "") : m + " Min"; }
   function dishEl(r) {
     var on = !!picked[r.id];
     var ings = r.ingredients || [];
@@ -536,20 +640,37 @@
     return h("li", { class: "dish" + (on ? " on" : "") }, pick,
       h("div", { class: "dbody" },
         h("div", { class: "dishhead" }, h("span", { class: "dname" }, r.name), h("span", { class: "lead" }), h("span", { class: "dcount" }, ings.length + (ings.length === 1 ? " Zutat" : " Zutaten"))),
+        (effortText(r.effort) || minutesText(r.minutes)) ? h("div", { class: "dmeta" },
+          minutesText(r.minutes) ? h("span", { title: "Ungefähre Dauer" }, "⏱ " + minutesText(r.minutes)) : null,
+          effortText(r.effort) ? h("span", { title: "Aufwand: " + EFFORT_NAMES[Math.round(Number(r.effort))], "aria-label": "Aufwand " + Math.round(Number(r.effort)) + " von 5, " + EFFORT_NAMES[Math.round(Number(r.effort))] }, "Aufwand " + effortText(r.effort)) : null) : null,
         h("p", { class: "dings" }, names || "Noch keine Zutaten eingetragen."),
         h("button", { class: "linkbtn dedit", type: "button", onclick: function () { openEditor(r); } }, "Bearbeiten")));
   }
+  /* Essensplan: pro Tag Mittag- und Abendessen, jeweils Gerichte oder "Auswärts".
+     Ältere Einträge (nur "dishes") gelten als Abendessen. */
+  function slotsOf(doc) {
+    doc = doc || {};
+    return {
+      lunch: Array.isArray(doc.lunch) ? doc.lunch : [],
+      dinner: Array.isArray(doc.dinner) ? doc.dinner : (Array.isArray(doc.dishes) ? doc.dishes : []),
+      outLunch: doc.outLunch === true, noteLunch: String(doc.noteLunch || ""),
+      outDinner: doc.outDinner === true, noteDinner: String(doc.noteDinner || "")
+    };
+  }
+  function allDishes(doc) { var st = slotsOf(doc); return st.lunch.concat(st.dinner); }
   function renderCookStats() {
     var box = $("cookstats");
     box.replaceChildren();
     if (recipes === null || !planLoaded) { box.append(h("p", { class: "note" }, "Statistik wird geladen …")); return; }
     var today = dn(todayStr());
     var span = cookPeriod === "all" ? null : Number(cookPeriod);
-    var counts = {}, total = 0, everEaten = {};
+    var counts = {}, total = 0, everEaten = {}, outN = 0;
     Object.keys(plan).forEach(function (ds) {
       var n = dn(ds);
       if (isNaN(n) || n > today) return;
-      (plan[ds].dishes || []).forEach(function (d) {
+      var st0 = slotsOf(plan[ds]);
+      if (span === null || n >= today - (span - 1)) outN += (st0.outLunch ? 1 : 0) + (st0.outDinner ? 1 : 0);
+      allDishes(plan[ds]).forEach(function (d) {
         var rec = recipes.filter(function (r) { return r.id === d.id; })[0];
         var key = d.id || d.name;
         everEaten[key] = true;
@@ -568,6 +689,7 @@
 
     var names = Object.keys(counts).sort(function (a, b) { return counts[b].n - counts[a].n || String(counts[a].name).localeCompare(String(counts[b].name), "de"); });
     if (!names.length) {
+      if (outN) box.append(h("p", { class: "fair" }, "Auswärts gegessen: " + outN + (outN === 1 ? " Mahlzeit." : " Mahlzeiten.")));
       box.append(h("div", { class: "empty" }, h("b", null, "Noch nichts gegessen in diesem Zeitraum"), h("span", null, "Plane Gerichte im Essensplan ein. Gezählt werden alle Tage bis einschließlich heute.")));
     } else {
       var top = counts[names[0]];
@@ -576,7 +698,7 @@
         h("div", { class: "duo" },
           h("div", { class: "who K" }, h("span", { class: "num" }, String(total)), h("span", { class: "lbl" }, total === 1 ? "Mahlzeit" : "Mahlzeiten")),
           h("div", { class: "who K C" }, h("span", { class: "num" }, String(names.length)), h("span", { class: "lbl" }, names.length === 1 ? "Gericht" : "verschiedene Gerichte"))),
-        h("p", { class: "fair" }, "Am häufigsten: " + top.name + " (" + top.n + "×).")));
+        h("p", { class: "fair" }, "Am häufigsten: " + top.name + " (" + top.n + "×)." + (outN ? " Auswärts gegessen: " + outN + (outN === 1 ? " Mahlzeit." : " Mahlzeiten.") : ""))));
       var max = counts[names[0]].n;
       var rank = h("div", { class: "panel" }, h("h2", null, "Rangliste"));
       names.forEach(function (k) {
@@ -709,9 +831,9 @@
   function openEditor(r) {
     confirmRecDel = false;
     if (r) {
-      draft = { id: r.id, name: r.name || "", at: r.at || 0, ings: (r.ingredients || []).map(function (g) { return { name: g.name || "", store: resolveStore(g.store), touched: true }; }) };
+      draft = { id: r.id, name: r.name || "", at: r.at || 0, effort: Math.round(Number(r.effort)) || 0, minutes: Math.round(Number(r.minutes)) || 0, ings: (r.ingredients || []).map(function (g) { return { name: g.name || "", store: resolveStore(g.store), touched: true }; }) };
     } else {
-      draft = { id: null, name: "", at: 0, ings: [] };
+      draft = { id: null, name: "", at: 0, effort: 0, minutes: 0, ings: [] };
     }
     if (!draft.ings.length) draft.ings.push({ name: "", store: resolveStore(curStore), touched: false });
     setCookMode("edit");
@@ -730,7 +852,16 @@
     box.replaceChildren();
     var storeList = sortedStores();
     var nameIn = h("input", { id: "recname", type: "text", maxlength: "80", placeholder: "z. B. Spaghetti Bolognese", "aria-label": "Name des Gerichts", value: draft.name, oninput: function (e) { draft.name = e.target.value; } });
-    var panel = h("div", { class: "panel" }, h("h2", null, draft.id ? "Gericht bearbeiten" : "Neues Gericht"), nameIn, h("h2", null, "Zutaten und Laden"));
+    var effSel = h("select", { "aria-label": "Aufwand", onchange: function (e) { draft.effort = Number(e.target.value) || 0; } },
+      h("option", { value: "0" }, "keine Angabe"));
+    for (var ei = 1; ei <= 5; ei++) effSel.append(h("option", { value: String(ei), selected: draft.effort === ei }, ei + " von 5 · " + EFFORT_NAMES[ei]));
+    var minIn = h("input", { type: "number", min: "1", max: "1440", step: "1", inputmode: "numeric", placeholder: "z. B. 30", "aria-label": "Ungefähre Dauer in Minuten", value: draft.minutes ? String(draft.minutes) : "",
+      oninput: function (e) { draft.minutes = Math.round(Number(e.target.value)) || 0; } });
+    var panel = h("div", { class: "panel" }, h("h2", null, draft.id ? "Gericht bearbeiten" : "Neues Gericht"), nameIn,
+      h("div", { class: "two" },
+        h("label", { class: "fl" }, "Aufwand", effSel),
+        h("label", { class: "fl" }, "Dauer in Minuten (ungefähr)", minIn)),
+      h("h2", null, "Zutaten und Laden"));
     draft.ings.forEach(function (g, idx) {
       var sel = h("select", { "aria-label": "Laden für Zutat " + (idx + 1), onchange: function (e) { g.store = e.target.value; g.touched = true; } });
       storeList.forEach(function (s) { sel.append(h("option", { value: s.id, selected: s.id === g.store }, s.name)); });
@@ -771,8 +902,11 @@
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
     var ings = draft.ings.map(function (g) { return { name: g.name.trim(), store: g.store || "" }; }).filter(function (g) { return g.name; });
     var p;
-    if (draft.id) p = db.doc("recipes/" + draft.id).update({ name: name, ingredients: ings, example: false });
-    else p = db.collection("recipes").add({ name: name, ingredients: ings, at: Date.now() });
+    var mins = Math.round(Number(draft.minutes)) || 0;
+    if (mins < 0 || mins > 1440) { toast("Die Dauer sollte zwischen 1 und 1440 Minuten liegen."); return; }
+    var eff = Math.round(Number(draft.effort)) || 0;
+    if (draft.id) p = db.doc("recipes/" + draft.id).update({ name: name, ingredients: ings, example: false, effort: eff, minutes: mins });
+    else p = db.collection("recipes").add({ name: name, ingredients: ings, at: Date.now(), effort: eff, minutes: mins });
     p.then(function () { setCookMode("list"); renderCook(); toast("„" + name + "“ ist gespeichert."); }).catch(writeFail);
   }
   function deleteRecipe() {
@@ -785,49 +919,82 @@
   /* Essensplan */
   var WD = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
   function dnToStr(n) { var d = new Date(n * 864e5); return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()); }
-  function setDay(ds, dishes) {
+  function saveDay(ds, st) {
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
-    var p = dishes.length ? db.doc("plan/" + ds).set({ date: ds, dishes: dishes, at: Date.now() }) : db.doc("plan/" + ds).delete();
+    var empty = !st.lunch.length && !st.dinner.length && !st.outLunch && !st.outDinner;
+    var p = empty ? db.doc("plan/" + ds).delete()
+      : db.doc("plan/" + ds).set({ date: ds, lunch: st.lunch, dinner: st.dinner, outLunch: st.outLunch, noteLunch: st.noteLunch, outDinner: st.outDinner, noteDinner: st.noteDinner, at: Date.now() });
     p.catch(writeFail);
   }
-  function dayEl(n, ds, dishes, today) {
-    var cls = "day" + (n === today ? " today" : "") + (n < today ? " past" : "");
-    var lab = h("div", { class: "dlab" }, h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n)));
-    var body = h("div", { class: "dmeals" });
-    if (dishes.length) {
-      var chips = h("div", { class: "mealchips" });
-      dishes.forEach(function (d, idx) {
-        var rec = (recipes || []).filter(function (r) { return r.id === d.id; })[0];
-        var nm = rec ? rec.name : d.name;
-        chips.append(h("span", { class: "meal" }, nm,
-          h("button", { class: "x", type: "button", "aria-label": nm + " aus dem Plan nehmen", onclick: function () {
-            setDay(ds, dishes.filter(function (_, j) { return j !== idx; }));
-          } }, "×")));
-      });
-      body.append(chips);
-    } else if (pickDay !== ds) {
-      body.append(h("p", { class: "noneyet" }, "Noch nichts geplant"));
+  var SLOT_NAMES = { lunch: "Mittagessen", dinner: "Abendessen" };
+  function slotEl(ds, slot) {
+    var Cap = slot === "lunch" ? "Lunch" : "Dinner";
+    var st = slotsOf(plan[ds]);
+    var dishes = st[slot], out = st["out" + Cap];
+    var key = ds + "|" + slot;
+    var box = h("div", { class: "slot" }, h("div", { class: "slabel" }, SLOT_NAMES[slot]));
+    var chips = h("div", { class: "mealchips" });
+    if (out) {
+      var note = st["note" + Cap];
+      chips.append(h("span", { class: "meal out" }, "Auswärts" + (note ? ": " + note : ""),
+        h("button", { class: "x", type: "button", "aria-label": SLOT_NAMES[slot] + " auswärts entfernen", onclick: function () {
+          var cur = slotsOf(plan[ds]); cur["out" + Cap] = false; cur["note" + Cap] = ""; saveDay(ds, cur);
+        } }, "×")));
     }
-    if (pickDay === ds) {
+    dishes.forEach(function (d, idx) {
+      var rec = (recipes || []).filter(function (r) { return r.id === d.id; })[0];
+      var nm = rec ? rec.name : d.name;
+      chips.append(h("span", { class: "meal" }, nm,
+        h("button", { class: "x", type: "button", "aria-label": nm + " aus dem Plan nehmen", onclick: function () {
+          var cur = slotsOf(plan[ds]); cur[slot] = cur[slot].filter(function (_, j) { return j !== idx; }); saveDay(ds, cur);
+        } }, "×")));
+    });
+    if (chips.children.length) box.append(chips);
+    else if (pickDay !== key + "|dish" && pickDay !== key + "|out") box.append(h("p", { class: "noneyet" }, "Noch nichts geplant"));
+
+    if (pickDay === key + "|dish") {
       var list = (recipes || []).slice().sort(function (a, b) {
         return (picked[b.id] ? 1 : 0) - (picked[a.id] ? 1 : 0) || String(a.name).localeCompare(String(b.name), "de");
       });
-      if (!list.length) body.append(h("p", { class: "noneyet" }, "Lege zuerst im Kochbuch ein Gericht an."));
+      if (!list.length) box.append(h("p", { class: "noneyet" }, "Lege zuerst im Kochbuch ein Gericht an."));
       else {
         var pk = h("div", { class: "picker" });
         list.forEach(function (r) {
           pk.append(h("button", { class: "bchip" + (picked[r.id] ? " sel" : ""), type: "button", onclick: function () {
             pickDay = null;
-            if (dishes.some(function (d) { return d.id === r.id; })) { renderMeal(); return; }
-            setDay(ds, dishes.concat([{ id: r.id, name: r.name }]));
+            var cur = slotsOf(plan[ds]);
+            if (cur[slot].some(function (d) { return d.id === r.id; })) { renderMeal(); return; }
+            cur[slot] = cur[slot].concat([{ id: r.id, name: r.name }]);
+            cur["out" + Cap] = false; cur["note" + Cap] = "";
+            saveDay(ds, cur);
             renderMeal();
           } }, r.name + (picked[r.id] ? " · gewählt" : "")));
         });
-        body.append(pk);
+        box.append(pk);
       }
     }
-    body.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = pickDay === ds ? null : ds; renderMeal(); } }, pickDay === ds ? "Schließen" : "+ Gericht"));
-    return h("div", { class: cls }, lab, body);
+    if (pickDay === key + "|out") {
+      var inp = h("input", { type: "text", maxlength: "60", placeholder: "Wo? z. B. bei Oma (kann leer bleiben)", "aria-label": "Wo seid ihr eingeladen?" });
+      var go = function () {
+        var cur = slotsOf(plan[ds]);
+        cur[slot] = []; cur["out" + Cap] = true; cur["note" + Cap] = inp.value.trim();
+        pickDay = null; saveDay(ds, cur); renderMeal();
+      };
+      inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); go(); } });
+      box.append(h("div", { class: "outform" }, inp,
+        h("button", { class: "primary", type: "button", onclick: go }, "Speichern")));
+    }
+    var acts = h("div", { class: "slotact" });
+    var open1 = pickDay === key + "|dish", open2 = pickDay === key + "|out";
+    acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open1 ? null : key + "|dish"; renderMeal(); } }, open1 ? "Schließen" : "+ Gericht"));
+    if (!out) acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open2 ? null : key + "|out"; renderMeal(); } }, open2 ? "Schließen" : "Auswärts"));
+    box.append(acts);
+    return box;
+  }
+  function dayEl(n, ds, today) {
+    var cls = "day" + (n === today ? " today" : "") + (n < today ? " past" : "");
+    var lab = h("div", { class: "dlab" }, h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n)));
+    return h("div", { class: cls }, lab, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
   }
   function renderMeal() {
     var box = $("mealdays");
@@ -837,19 +1004,381 @@
     $("weeklabel").textContent = (weekOffset === 0 ? "Diese Woche · " : "") + dayLabel(mon) + " – " + dayLabel(mon + 6);
     $("weektoday").hidden = weekOffset === 0;
     if (!planLoaded || recipes === null) { $("mealhead").textContent = "Essensplan wird geladen …"; $("mealshop").hidden = true; return; }
-    var total = 0, ids = {};
+    var total = 0, outN = 0, ids = {};
     for (var i = 0; i < 7; i++) {
       var n = mon + i, ds = dnToStr(n);
-      var doc = plan[ds];
-      var dishes = doc && doc.dishes ? doc.dishes : [];
+      var st = slotsOf(plan[ds]);
+      var dishes = st.lunch.concat(st.dinner);
       total += dishes.length;
+      outN += (st.outLunch ? 1 : 0) + (st.outDinner ? 1 : 0);
       dishes.forEach(function (d) { ids[d.id] = true; });
-      box.append(dayEl(n, ds, dishes, today));
+      box.append(dayEl(n, ds, today));
     }
-    $("mealhead").textContent = total === 0 ? "Noch nichts geplant" : total === 1 ? "1 Gericht geplant" : total + " Gerichte geplant";
+    var txt = total === 0 ? "Noch nichts geplant" : total === 1 ? "1 Gericht geplant" : total + " Gerichte geplant";
+    if (outN) txt += " · " + outN + "× auswärts";
+    if (total === 0 && outN) txt = outN + "× auswärts, sonst noch nichts geplant";
+    $("mealhead").textContent = txt;
     mealIds = Object.keys(ids).filter(function (id) { return recipes.some(function (r) { return r.id === id; }); });
     $("mealshop").hidden = !mealIds.length;
     $("mealshop").textContent = mealIds.length === 1 ? "Zutaten für 1 Gericht einkaufen" : "Zutaten für " + mealIds.length + " Gerichte einkaufen";
+  }
+
+  /* ---------- Kalender ---------- */
+  var MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+  var WDLONG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+  var WHO_NAMES = { F: "F", C: "C", B: "Gemeinsam" };
+  function evWho(e) { return e.who === "F" ? "F" : e.who === "C" ? "C" : "B"; }
+  function evEndStr(e) { return e.endDate && String(e.endDate) > String(e.date) ? String(e.endDate) : String(e.date); }
+  function isAllDay(e) { return e.allDay === true || !e.start; }
+  function eventsOn(ds) {
+    return events.filter(function (e) { return e.date && String(e.date) <= ds && ds <= evEndStr(e); }).sort(function (a, b) {
+      var aa = isAllDay(a), bb = isAllDay(b);
+      if (aa !== bb) return aa ? -1 : 1;
+      return String(a.start || "").localeCompare(String(b.start || "")) || String(a.title || "").localeCompare(String(b.title || ""), "de");
+    });
+  }
+  function isoWeek(n) {
+    var th = n - ((n + 3) % 7) + 3;
+    var y = new Date(th * 864e5).getUTCFullYear();
+    return Math.floor((th - Math.round(Date.UTC(y, 0, 1) / 864e5)) / 7) + 1;
+  }
+  function evTimeText(e) {
+    var multi = evEndStr(e) !== String(e.date);
+    var t = isAllDay(e) ? "ganztägig" : e.start + (e.end ? "–" + e.end : "");
+    return multi ? t + " · " + fmt(String(e.date)) + "–" + fmt(evEndStr(e)) : t;
+  }
+  function evRow(e) {
+    var w = evWho(e);
+    return h("button", { class: "evrow " + w, type: "button", onclick: function () { openEv(e, null); } },
+      h("span", { class: "evtop" }, h("span", { class: "evtime" }, evTimeText(e)), h("span", { class: "evwho " + w }, WHO_NAMES[w])),
+      h("span", { class: "evtitle" }, e.title || "Termin"),
+      e.place ? h("span", { class: "evplace" }, e.place) : null);
+  }
+  function calHeadline() {
+    var t = todayStr(), now = eventsOn(t).length;
+    var next = events.filter(function (e) { return String(e.date) > t; }).sort(function (a, b) { return String(a.date).localeCompare(String(b.date)) || String(a.start || "").localeCompare(String(b.start || "")); })[0];
+    var txt = now === 0 ? "Heute keine Termine" : now === 1 ? "Heute 1 Termin" : "Heute " + now + " Termine";
+    if (next) { var nn = dn(String(next.date)); txt += " · als Nächstes: " + (next.title || "Termin") + ", " + WD[(nn + 3) % 7] + " " + fmt(String(next.date)); }
+    return txt;
+  }
+  function renderCal() {
+    if (!calAnchor) { calAnchor = calSel = dn(todayStr()); }
+    var head = $("calhead");
+    var grid = $("calgrid"), det = $("caldet");
+    grid.replaceChildren(); det.replaceChildren();
+    if (dbMissing) { head.textContent = "Kalender"; grid.append(h("div", { class: "banner" }, h("p", null, connText()))); return; }
+    if (!eventsLoaded) { head.textContent = "Kalender wird geladen …"; return; }
+    head.textContent = calHeadline();
+    Array.prototype.forEach.call($("calmode").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === calMode)); });
+    var today = dn(todayStr());
+    var d = new Date(calAnchor * 864e5), y = d.getUTCFullYear(), m = d.getUTCMonth();
+    if (calMode === "month") {
+      $("callabel").textContent = MONTHS[m] + " " + y;
+      var first = Math.round(Date.UTC(y, m, 1) / 864e5), last = Math.round(Date.UTC(y, m + 1, 0) / 864e5);
+      var from = weekStart(first), to = weekStart(last) + 6;
+      var g = h("div", { class: "calgrid", role: "grid", "aria-label": MONTHS[m] + " " + y });
+      WD.forEach(function (w) { g.append(h("div", { class: "calwd", role: "columnheader" }, w)); });
+      for (var n = from; n <= to; n++) {
+        (function (n) {
+          var ds = dnToStr(n), evs = eventsOn(ds), dd = new Date(n * 864e5);
+          var cls = "cell" + (dd.getUTCMonth() !== m ? " other" : "") + (n === today ? " today" : "") + (n === calSel ? " sel" : "");
+          var box = h("div", { class: "evs" });
+          evs.slice(0, 3).forEach(function (e) { box.append(h("span", { class: "evb " + evWho(e) }, e.title || "Termin")); });
+          if (evs.length > 3) box.append(h("span", { class: "evmore" }, "+" + (evs.length - 3)));
+          g.append(h("button", { class: cls, type: "button", role: "gridcell", "aria-label": WDLONG[(n + 3) % 7] + " " + dayLabel(n) + ", " + (evs.length === 0 ? "keine Termine" : evs.length === 1 ? "1 Termin" : evs.length + " Termine"),
+            "aria-pressed": String(n === calSel), onclick: function () { calSel = n; renderCal(); } },
+            h("span", { class: "dnum" }, String(dd.getUTCDate())), box));
+        })(n);
+      }
+      grid.append(g);
+      var sds = dnToStr(calSel), sevs = eventsOn(sds);
+      var panel = h("div", { class: "panel" }, h("h2", null, WDLONG[(calSel + 3) % 7] + ", " + dayLabel(calSel) + (calSel === today ? " · heute" : "")));
+      if (!sevs.length) panel.append(h("p", { class: "noneyet" }, "Keine Termine an diesem Tag."));
+      else { var lst = h("div", { class: "evlist" }); sevs.forEach(function (e) { lst.append(evRow(e)); }); panel.append(lst); }
+      panel.append(h("div", { class: "row" }, h("button", { class: "primary", type: "button", onclick: function () { openEv(null, sds); } }, "+ Termin eintragen")));
+      det.append(panel);
+    } else {
+      var mon = weekStart(calAnchor);
+      $("callabel").textContent = "KW " + isoWeek(mon) + " · " + dayLabel(mon) + " – " + dayLabel(mon + 6);
+      for (var i = 0; i < 7; i++) {
+        (function (n) {
+          var ds = dnToStr(n), evs = eventsOn(ds);
+          var card = h("div", { class: "wday" + (n === today ? " today" : "") + (n < today ? " past" : "") },
+            h("div", { class: "whead" }, h("b", null, WDLONG[(n + 3) % 7]), h("span", null, dayLabel(n)),
+              h("button", { class: "linkbtn", type: "button", onclick: function () { openEv(null, ds); } }, "+ Termin")));
+          if (!evs.length) card.append(h("p", { class: "noneyet" }, "Keine Termine"));
+          else { var lst = h("div", { class: "evlist" }); evs.forEach(function (e) { lst.append(evRow(e)); }); card.append(lst); }
+          grid.append(card);
+        })(mon + i);
+      }
+    }
+  }
+  /* ---------- Kalender: .ics importieren und exportieren ---------- */
+  function icsUnescape(v) { return String(v || "").replace(/\\[nN]/g, " ").replace(/\\([,;\\])/g, "$1").replace(/\s+/g, " ").trim(); }
+  function icsHash(str) {
+    var a = 5381, b = 52711;
+    for (var i = 0; i < str.length; i++) { var c = str.charCodeAt(i); a = (Math.imul(a, 33) ^ c) >>> 0; b = (Math.imul(b, 131) + c) >>> 0; }
+    return "i" + a.toString(36) + b.toString(36);
+  }
+  /* Zeitangabe -> { n: Tag-Nummer, min: Minuten seit Mitternacht oder -1 bei ganztägig } in Ortszeit */
+  function icsTime(val, params) {
+    val = String(val || "").trim();
+    var m = /^(\d{4})(\d\d)(\d\d)(?:T(\d\d)(\d\d)(\d\d)?(Z)?)?$/.exec(val);
+    if (!m) return null;
+    var allDay = /VALUE=DATE(?!-)/i.test(params || "") || m[4] === undefined;
+    if (allDay) return { n: Math.round(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 864e5), min: -1 };
+    if (m[7]) {
+      var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)));
+      return { n: Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5), min: d.getHours() * 60 + d.getMinutes() };
+    }
+    return { n: Math.round(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 864e5), min: +m[4] * 60 + +m[5] };
+  }
+  function icsDuration(v) {
+    var m = /^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:\d+S)?)?$/.exec(String(v || "").trim());
+    if (!m) return null;
+    return (+(m[1] || 0)) * 10080 + (+(m[2] || 0)) * 1440 + (+(m[3] || 0)) * 60 + (+(m[4] || 0));
+  }
+  var ICS_DAYS = { MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6 };
+  function icsOccurrences(ev, winFrom, winTo) {
+    var r = ev.rrule, s0 = ev.s.n, out = [];
+    if (!r) return [s0];
+    var f = r.FREQ, step = Math.max(1, parseInt(r.INTERVAL, 10) || 1), count = r.COUNT ? parseInt(r.COUNT, 10) : 0;
+    var until = null;
+    if (r.UNTIL) { var u = icsTime(r.UNTIL, ""); if (u) until = u.n; }
+    var limit = Math.min(winTo, until === null ? winTo : until);
+    var byday = r.BYDAY ? r.BYDAY.split(",") : [];
+    var seen = 0, guard = 0;
+    function take(n) { if (n < s0) return true; seen++; if (n >= winFrom && n <= limit) out.push(n); return !(count && seen >= count); }
+    var dt0 = new Date(s0 * 864e5), y0 = dt0.getUTCFullYear(), m0 = dt0.getUTCMonth(), d0 = dt0.getUTCDate();
+    if (f === "DAILY") {
+      for (var n = s0; n <= limit && guard < 4000; n += step, guard++) if (!take(n)) break;
+    } else if (f === "WEEKLY") {
+      var days = byday.length ? byday.map(function (x) { return ICS_DAYS[x.slice(-2)]; }).filter(function (x) { return x !== undefined; }).sort() : [(s0 + 3) % 7];
+      var w0 = weekStart(s0), stop = false;
+      for (var w = 0; !stop && guard < 3000; w++, guard++) {
+        var base = w0 + w * 7 * step;
+        if (base > limit) break;
+        for (var di = 0; di < days.length; di++) { if (!take(base + days[di])) { stop = true; break; } }
+      }
+    } else if (f === "MONTHLY") {
+      var bmd = r.BYMONTHDAY ? r.BYMONTHDAY.split(",").map(Number) : null, stop2 = false;
+      for (var k = 0; !stop2 && guard < 1500; k += step, guard++) {
+        var mm = m0 + k, yy = y0 + Math.floor(mm / 12); mm = ((mm % 12) + 12) % 12;
+        var first = Math.round(Date.UTC(yy, mm, 1) / 864e5), dim = daysIn(yy, mm + 1);
+        if (first > limit) break;
+        var cands = [];
+        if (bmd) bmd.forEach(function (d) { if (d > 0 && d <= dim) cands.push(first + d - 1); else if (d < 0 && -d <= dim) cands.push(first + dim + d); });
+        else if (byday.length) {
+          byday.forEach(function (x) {
+            var mt = /^([+-]?\d)?(MO|TU|WE|TH|FR|SA|SU)$/.exec(x); if (!mt) return;
+            var wd = ICS_DAYS[mt[2]], ord = mt[1] ? parseInt(mt[1], 10) : 0, list = [];
+            for (var d2 = 0; d2 < dim; d2++) if ((first + d2 + 3) % 7 === wd) list.push(first + d2);
+            if (!ord) cands = cands.concat(list); else if (ord > 0 && list[ord - 1] !== undefined) cands.push(list[ord - 1]); else if (ord < 0 && list[list.length + ord] !== undefined) cands.push(list[list.length + ord]);
+          });
+        } else if (d0 <= dim) cands.push(first + d0 - 1);
+        cands.sort(function (a, b) { return a - b; });
+        for (var ci = 0; ci < cands.length; ci++) { if (!take(cands[ci])) { stop2 = true; break; } }
+      }
+    } else if (f === "YEARLY") {
+      for (var yk = 0; guard < 300; yk += step, guard++) {
+        var y2 = y0 + yk;
+        if (Math.round(Date.UTC(y2, 0, 1) / 864e5) > limit) break;
+        if (d0 > daysIn(y2, m0 + 1)) continue;
+        if (!take(Math.round(Date.UTC(y2, m0, d0) / 864e5))) break;
+      }
+    } else return [s0];
+    return out;
+  }
+  function parseIcs(text, includePast) {
+    var lines = String(text).replace(/\r\n?/g, "\n").replace(/\n[ \t]/g, "").split("\n");
+    var vevents = [], cur = null, alarm = 0;
+    lines.forEach(function (line) {
+      if (/^BEGIN:VALARM/i.test(line)) { alarm++; return; }
+      if (/^END:VALARM/i.test(line)) { alarm = Math.max(0, alarm - 1); return; }
+      if (/^BEGIN:VEVENT/i.test(line)) { cur = { ex: [] }; return; }
+      if (/^END:VEVENT/i.test(line)) { if (cur) vevents.push(cur); cur = null; return; }
+      if (!cur || alarm) return;
+      var i = line.indexOf(":"); if (i < 1) return;
+      var head = line.slice(0, i).split(";"), name = head[0].toUpperCase(), params = head.slice(1).join(";"), val = line.slice(i + 1);
+      if (name === "DTSTART") cur.s = icsTime(val, params);
+      else if (name === "DTEND") cur.e = icsTime(val, params);
+      else if (name === "DURATION") cur.dur = icsDuration(val);
+      else if (name === "SUMMARY") cur.title = icsUnescape(val);
+      else if (name === "LOCATION") cur.place = icsUnescape(val);
+      else if (name === "DESCRIPTION") cur.note = icsUnescape(val);
+      else if (name === "UID") cur.uid = val.trim();
+      else if (name === "STATUS") cur.status = val.trim().toUpperCase();
+      else if (name === "RECURRENCE-ID") cur.recId = icsTime(val, params);
+      else if (name === "EXDATE") val.split(",").forEach(function (v) { var t = icsTime(v, params); if (t) cur.ex.push(t.n); });
+      else if (name === "RRULE") { var o = {}; val.split(";").forEach(function (kv) { var j = kv.indexOf("="); if (j > 0) o[kv.slice(0, j).toUpperCase()] = kv.slice(j + 1).toUpperCase(); }); cur.rrule = o; }
+    });
+    var today = dn(todayStr()), winFrom = includePast ? today - 3650 : today - 30, winTo = today + 730;
+    var overrides = {};
+    vevents.forEach(function (v) { if (v.recId && v.uid) overrides[v.uid + "|" + v.recId.n] = true; });
+    var res = [], recurring = 0, cancelled = 0, bad = 0;
+    vevents.forEach(function (v, idx) {
+      if (!v.s) { bad++; return; }
+      if (v.status === "CANCELLED") { cancelled++; return; }
+      var uid = v.uid || ("ohne-uid-" + idx + "-" + (v.title || ""));
+      var allDay = v.s.min < 0;
+      var spanMin;   // Dauer in Minuten (zeitgebunden) bzw. Tage (ganztägig)
+      if (allDay) spanMin = v.e && v.e.n > v.s.n ? v.e.n - v.s.n : v.dur ? Math.max(1, Math.round(v.dur / 1440)) : 1;
+      else if (v.e && v.e.min >= 0) spanMin = (v.e.n * 1440 + v.e.min) - (v.s.n * 1440 + v.s.min);
+      else spanMin = v.dur || 0;
+      if (spanMin < 0) spanMin = 0;
+      var occ = v.rrule ? icsOccurrences(v, winFrom, winTo) : [v.s.n];
+      if (v.rrule) recurring++;
+      occ.forEach(function (n) {
+        if (v.rrule && (v.ex.indexOf(n) >= 0 || (!v.recId && overrides[uid + "|" + n]))) return;
+        var endN, st = "", en = "";
+        if (allDay) endN = n + spanMin - 1;
+        else {
+          var total = v.s.min + spanMin; endN = n + Math.floor(total / 1440);
+          st = pad(Math.floor(v.s.min / 60)) + ":" + pad(v.s.min % 60);
+          if (spanMin > 0) { var em = total % 1440; en = pad(Math.floor(em / 60)) + ":" + pad(em % 60); }
+        }
+        if (!v.rrule && !includePast && endN < today - 30) return;
+        res.push({ id: icsHash(uid + "|" + n), data: {
+          title: (v.title || "Termin").slice(0, 80), date: dnToStr(n), endDate: endN > n ? dnToStr(endN) : "", allDay: allDay,
+          start: st, end: en, place: (v.place || "").slice(0, 60), note: (v.note || "").slice(0, 200), imported: true
+        } });
+      });
+    });
+    var dedupe = {}; res = res.filter(function (x) { if (dedupe[x.id]) return false; dedupe[x.id] = true; return true; });
+    res.sort(function (a, b) { return a.data.date.localeCompare(b.data.date) || a.data.start.localeCompare(b.data.start); });
+    return { events: res, recurring: recurring, cancelled: cancelled, bad: bad };
+  }
+  function icsStatus(msg, isErr) { var el = $("icsstatus"); el.textContent = msg || ""; el.className = "meta" + (isErr ? " err" : ""); }
+  var pendingIcs = null;
+  function renderIcsConfirm() {
+    var box = $("icsconfirm");
+    box.replaceChildren();
+    if (!pendingIcs) { box.hidden = true; return; }
+    box.hidden = false;
+    var n = pendingIcs.events.length;
+    var sample = h("ul", { class: "icssample" });
+    pendingIcs.events.slice(0, 5).forEach(function (x) { sample.append(h("li", null, fmt(x.data.date) + " · " + x.data.title)); });
+    box.append(h("div", { class: "panel" },
+      h("p", null, n + (n === 1 ? " Termin" : " Termine") + " gefunden" + (pendingIcs.recurring ? " (" + pendingIcs.recurring + " wiederkehrende, auf einzelne Tage bis in 2 Jahre ausgerollt)" : "") + ". Beispiele:"),
+      sample,
+      h("p", { class: "fair" }, "Sie gehören zu: " + WHO_NAMES[$("icswho").value] + ". Erneutes Importieren derselben Datei erzeugt keine Doppelten, sondern aktualisiert die Termine."),
+      h("div", { class: "row" },
+        h("button", { class: "primary", type: "button", onclick: runIcsImport }, n + " Termine importieren"),
+        h("button", { class: "linkbtn", type: "button", onclick: function () { pendingIcs = null; renderIcsConfirm(); } }, "Abbrechen"))));
+  }
+  function readIcsFile(file) {
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { icsStatus("Die Datei ist zu groß (mehr als 3 MB).", true); return; }
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var text = String(r.result);
+        if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error("format");
+        var res = parseIcs(text, $("icspast").checked);
+        if (!res.events.length) { icsStatus("Es wurden keine passenden Termine gefunden" + (res.cancelled ? " (" + res.cancelled + " abgesagte übersprungen)" : "") + ". Ältere Termine werden nur mit dem Häkchen „Auch vergangene Termine“ importiert.", true); return; }
+        if (res.events.length > 2000) { icsStatus("Das sind zu viele Termine (" + res.events.length + "). Entferne das Häkchen bei „Auch vergangene Termine“ oder teile die Datei auf.", true); return; }
+        pendingIcs = res; icsStatus(""); renderIcsConfirm();
+      } catch (e) { icsStatus("Das ist keine gültige Kalenderdatei (.ics).", true); }
+    };
+    r.onerror = function () { icsStatus("Die Datei konnte nicht gelesen werden.", true); };
+    r.readAsText(file);
+  }
+  function runIcsImport() {
+    if (!db || !pendingIcs) return;
+    var who = $("icswho").value, now = Date.now(), list = pendingIcs.events, n = list.length;
+    var ops = list.map(function (x) { return { c: "events", id: x.id, data: Object.assign({ who: who, by: me || "", at: now }, x.data) }; });
+    pendingIcs = null; renderIcsConfirm();
+    icsStatus("Import läuft …");
+    runBatches(ops).then(function () { icsStatus(n + " Termine importiert."); toast(n + " Termine importiert."); })
+      .catch(function (e) { icsStatus("Import fehlgeschlagen" + (e && e.code ? " (" + e.code + ")" : "") + (e && e.code === "23514" ? ". Das einmalige Datenbank-Update für den Kalender fehlt noch." : "."), true); });
+  }
+  function icsEsc(v) { return String(v || "").replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n"); }
+  function icsFold(line) {
+    var out = [], bytes = 0, cur = "";
+    Array.from(line).forEach(function (ch) {
+      var b = new TextEncoder().encode(ch).length;
+      if (bytes + b > 73) { out.push(cur); cur = " " + ch; bytes = 1 + b; } else { cur += ch; bytes += b; }
+    });
+    out.push(cur);
+    return out.join("\r\n");
+  }
+  function exportIcs() {
+    var f = $("icsexwho").value;
+    var list = events.filter(function (e) { return f === "all" || evWho(e) === f; });
+    if (!list.length) { icsStatus("Es gibt keine Termine zum Exportieren.", true); return; }
+    var stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+    var L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Haushalt F und C//DE", "CALSCALE:GREGORIAN"];
+    list.forEach(function (e) {
+      var ds = String(e.date).replace(/-/g, ""), end = evEndStr(e).replace(/-/g, "");
+      L.push("BEGIN:VEVENT", "UID:" + e.id + "@haushalt", "DTSTAMP:" + stamp);
+      if (isAllDay(e)) {
+        var endEx = dnToStr(dn(evEndStr(e)) + 1).replace(/-/g, "");
+        L.push("DTSTART;VALUE=DATE:" + ds, "DTEND;VALUE=DATE:" + endEx);
+      } else {
+        L.push("DTSTART:" + ds + "T" + String(e.start).replace(":", "") + "00");
+        L.push("DTEND:" + end + "T" + String(e.end || e.start).replace(":", "") + "00");
+      }
+      L.push("SUMMARY:" + icsEsc((WHO_NAMES[evWho(e)] === "Gemeinsam" ? "" : "[" + evWho(e) + "] ") + (e.title || "Termin")));
+      if (e.place) L.push("LOCATION:" + icsEsc(e.place));
+      if (e.note) L.push("DESCRIPTION:" + icsEsc(e.note));
+      L.push("END:VEVENT");
+    });
+    L.push("END:VCALENDAR");
+    var blob = new Blob([L.map(icsFold).join("\r\n") + "\r\n"], { type: "text/calendar" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "haushalt-termine-" + todayStr() + ".ics";
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    icsStatus(list.length + " Termine exportiert.");
+  }
+  var confirmIcsClear = false;
+  function clearImported() {
+    var imp = events.filter(function (e) { return e.imported === true; });
+    if (!imp.length) { icsStatus("Es gibt keine importierten Termine."); return; }
+    if (!confirmIcsClear) { confirmIcsClear = true; $("icsclear").textContent = "Ja, " + imp.length + " importierte Termine löschen"; $("icsclear").className = "linkbtn danger"; return; }
+    confirmIcsClear = false; $("icsclear").textContent = "Alle importierten Termine löschen"; $("icsclear").className = "linkbtn";
+    icsStatus("Löschen läuft …");
+    var chain = Promise.resolve();
+    for (var i = 0; i < imp.length; i += 20) (function (part) {
+      chain = chain.then(function () { return Promise.all(part.map(function (e) { return db.doc("events/" + e.id).delete(); })); });
+    })(imp.slice(i, i + 20));
+    chain.then(function () { icsStatus(imp.length + " importierte Termine gelöscht."); }).catch(function (e) { icsStatus("Löschen fehlgeschlagen.", true); writeFail(e); });
+  }
+
+  function calStep(dir) {
+    var d = new Date(calAnchor * 864e5);
+    if (calMode === "month") {
+      var y = d.getUTCFullYear(), m = d.getUTCMonth() + dir;
+      calAnchor = Math.round(Date.UTC(y, m, 1) / 864e5);
+      calSel = calAnchor;
+    } else { calAnchor += dir * 7; calSel = calAnchor; }
+    renderCal();
+  }
+  function openEv(e, ds) {
+    evDraft = { id: e ? e.id : null }; confirmEvDel = false;
+    var def = ds || dnToStr(calSel || dn(todayStr()));
+    $("evtitle").value = e ? (e.title || "") : "";
+    $("evwho").value = e ? evWho(e) : (me === "F" || me === "C" ? me : "B");
+    $("evdate").value = e ? String(e.date) : def;
+    $("evend").value = e && e.endDate ? String(e.endDate) : "";
+    $("evall").checked = e ? isAllDay(e) : true;
+    $("evstart").value = e && e.start ? e.start : "";
+    $("evfinish").value = e && e.end ? e.end : "";
+    $("evplace").value = e ? (e.place || "") : "";
+    $("evnote").value = e ? (e.note || "") : "";
+    $("evformtitle").textContent = e ? "Termin bearbeiten" : "Neuer Termin";
+    $("evdel").hidden = !e; $("evdel").textContent = "Termin löschen"; $("evdel").className = "linkbtn";
+    syncEvAll();
+    $("calmain").hidden = true; $("evform").hidden = false;
+    try { window.scrollTo(0, 0); } catch (x) {}
+    $("evtitle").focus();
+  }
+  function closeEv() { evDraft = null; confirmEvDel = false; $("evform").hidden = true; $("calmain").hidden = false; renderCal(); }
+  function syncEvAll() {
+    var all = $("evall").checked;
+    $("evtimes").hidden = all;
+    $("evstart").disabled = all; $("evfinish").disabled = all;
   }
 
   /* Ausgaben */
@@ -875,8 +1404,96 @@
     hit = list.filter(function (b) { return b.start <= t && t <= b.end; })[0] || list[0] || null;
     return hit;
   }
+  /* Wiederholungen */
+  function daysIn(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+  function addMonthsStr(str, n, day) {
+    var p = str.split("-").map(Number);
+    var tot = p[0] * 12 + (p[1] - 1) + n;
+    var y = Math.floor(tot / 12), m = tot % 12 + 1;
+    var d = Math.min(day || p[2], daysIn(y, m));
+    return y + "-" + pad(m) + "-" + pad(d);
+  }
+  function nextBudgetPeriod(b) {
+    var sp = String(b.start).split("-").map(Number), ep = String(b.end).split("-").map(Number);
+    if (sp.length !== 3 || ep.length !== 3 || String(b.end) < String(b.start)) return null;
+    if (sp[2] === 1 && ep[2] === daysIn(ep[0], ep[1])) {            // ganze Monate: Monat für Monat weiter
+      var months = (ep[0] - sp[0]) * 12 + (ep[1] - sp[1]) + 1;
+      var ns = addMonthsStr(b.start, months, 1);
+      var np = ns.split("-").map(Number);
+      var ne = addMonthsStr(ns, months - 1, 1).split("-").map(Number);
+      return { start: ns, end: ne[0] + "-" + pad(ne[1]) + "-" + pad(daysIn(ne[0], ne[1])) };
+    }
+    var len = dn(b.end) - dn(b.start) + 1;                           // sonst: gleich viele Tage direkt danach
+    return { start: dnToStr(dn(b.end) + 1), end: dnToStr(dn(b.end) + len) };
+  }
+  function nextSpendDate(sp) {
+    var step = sp.repeat, last = String(sp.date), origin = String(sp.origin || sp.date);
+    if (step === "week") return dnToStr(dn(last) + 7);
+    var every = step === "year" ? 12 : 1, od = Number(origin.split("-")[2]);
+    var n = 1;
+    for (var guard = 0; guard < 2000; guard++, n++) {
+      var cand = addMonthsStr(origin, n * every, od);
+      if (cand > last) return cand;
+    }
+    return null;
+  }
+  var repPending = {}, spendsLoaded = false, repBusy = false;
+  function ensureRepeats() {
+    if (!db || dbMissing || budgets === null || !spendsLoaded || repBusy) return;
+    var today = todayStr(), writes = [];
+    var allB = budgets.slice();
+    var latest = {};
+    budgets.forEach(function (b) { var k = b.series || b.id; if (!latest[k] || String(b.start) > String(latest[k].start)) latest[k] = b; });
+    Object.keys(latest).forEach(function (k) {
+      var cur = latest[k], n = 0;
+      while (cur.repeat === true && n < 36) {
+        var np = nextBudgetPeriod(cur);
+        if (!np || np.start > today) break;
+        var id = "s" + k + "-" + np.start;
+        var nb = { name: cur.name || "", start: np.start, end: np.end, amount: cur.amount, repeat: true, series: k, at: Date.now() };
+        nb.id = id;
+        if (!allB.some(function (x) { return x.id === id; }) && !repPending[id]) { repPending[id] = true; var d = Object.assign({}, nb); delete d.id; writes.push(["budgets/" + id, d, id]); }
+        allB.push(nb);
+        cur = nb; n++;
+      }
+    });
+    var latestS = {};
+    spends.forEach(function (x) { if (!x.series) return; if (!latestS[x.series] || String(x.date) > String(latestS[x.series].date)) latestS[x.series] = x; });
+    Object.keys(latestS).forEach(function (k) {
+      var cur = latestS[k], n = 0;
+      while (cur.repeat && n < 60) {
+        var nd = nextSpendDate(cur);
+        if (!nd || nd > today) break;
+        var bud = allB.filter(function (x) { return x.start <= nd && nd <= x.end; })[0];
+        if (!bud) break;
+        var id = "x" + k + "-" + nd;
+        var ns = { budget: bud.id, amount: cur.amount, category: cur.category, place: cur.place || "", what: cur.what || "", date: nd, by: cur.by || "", at: Date.now(), repeat: cur.repeat, series: k, origin: cur.origin || cur.date, auto: true };
+        if (!spends.some(function (x) { return x.id === id; }) && !repPending[id]) { repPending[id] = true; writes.push(["spend/" + id, ns, id]); }
+        cur = Object.assign({ id: id }, ns); n++;
+      }
+    });
+    if (!writes.length) return;
+    repBusy = true;
+    var chain = Promise.resolve();
+    writes.forEach(function (w) { chain = chain.then(function () { return db.doc(w[0]).set(w[1]); }).then(function () { delete repPending[w[2]]; }, function (e) { delete repPending[w[2]]; throw e; }); });
+    chain.then(function () { repBusy = false; toast(writes.length === 1 ? "Eine wiederkehrende Buchung wurde automatisch angelegt." : writes.length + " wiederkehrende Buchungen wurden automatisch angelegt."); })
+      .catch(function (e) { repBusy = false; writeFail(e); });
+  }
+  function stopBudgetSeries(b) {
+    var k = b.series || b.id;
+    return Promise.all((budgets || []).filter(function (x) { return (x.series || x.id) === k && x.repeat === true; })
+      .map(function (x) { return db.doc("budgets/" + x.id).update({ repeat: false }); }));
+  }
+  function stopSpendSeries(sp) {
+    if (!sp.series) return Promise.resolve();
+    return Promise.all(spends.filter(function (x) { return x.series === sp.series && x.repeat; })
+      .map(function (x) { return db.doc("spend/" + x.id).update({ repeat: "" }); }));
+  }
+  var REPEAT_LABEL = { week: "wöchentlich", month: "monatlich", year: "jährlich" };
+
   function openBudgetForm(mode, b) {
     budgetForm = mode; confirmBudgetDel = false;
+    $("brepeat").checked = !!(b && b.repeat === true);
     var t = todayStr(), y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7));
     var last = new Date(y, m, 0).getDate();
     $("bname").value = b ? (b.name || "") : "";
@@ -892,8 +1509,9 @@
   function delSpend(s) {
     if (!db) return;
     var copy = Object.assign({}, s); delete copy.id;
-    db.doc("spend/" + s.id).delete().then(function () {
-      toast("Ausgabe gelöscht.", "Rückgängig", function () { db.doc("spend/" + s.id).set(copy).catch(writeFail); });
+    var stop = s.repeat ? stopSpendSeries(s) : Promise.resolve();
+    stop.then(function () { return db.doc("spend/" + s.id).delete(); }).then(function () {
+      toast(s.repeat ? "Ausgabe gelöscht. Die Wiederholung ist beendet." : "Ausgabe gelöscht.", "Rückgängig", function () { db.doc("spend/" + s.id).set(copy).catch(writeFail); });
     }).catch(writeFail);
   }
 
@@ -1003,7 +1621,7 @@
         h("div", { class: "who R" }, h("span", { class: "num" }, eur(b.amount)), h("span", { class: "lbl" }, "Budget"))),
       wrap,
       h("p", { class: "fair" }, eur(spent) + " ausgegeben (" + pct(spent / b.amount * 100) + "). " + note),
-      h("p", { class: "foot" }, "Der Strich zeigt, wie weit der Zeitraum heute ist.")));
+      h("p", { class: "foot" }, "Der Strich zeigt, wie weit der Zeitraum heute ist." + (b.repeat === true ? " Dieses Budget wiederholt sich automatisch." : ""))));
 
     /* Vorschläge für Kategorien */
     var dl = $("catlist"); dl.replaceChildren();
@@ -1026,7 +1644,7 @@
       var rows = mine.slice().sort(function (a, c) { return String(c.date).localeCompare(String(a.date)) || (c.at || 0) - (a.at || 0); });
       var ul = h("ul", { class: "spends" });
       rows.forEach(function (s) {
-        var meta = [String(s.category || "").trim() || "Sonstiges", s.place, s.date ? fmt(s.date) : ""].filter(Boolean).join(" · ");
+        var meta = [String(s.category || "").trim() || "Sonstiges", s.place, s.date ? fmt(s.date) : "", REPEAT_LABEL[s.repeat] ? "↻ " + REPEAT_LABEL[s.repeat] : ""].filter(Boolean).join(" · ");
         ul.append(h("li", null,
           h("span", { class: "sw" }, s.what || String(s.category || "").trim() || "Ausgabe"),
           h("span", { class: "sa" }, eur(s.amount || 0)),
@@ -1050,7 +1668,8 @@
     $("cookview").hidden = section !== "cook";
     $("mealview").hidden = section !== "meal";
     $("spendview").hidden = section !== "spend";
-    [["putz", "tabputz"], ["shop", "tabshop"], ["cook", "tabcook"], ["meal", "tabmeal"], ["spend", "tabspend"]].forEach(function (p) {
+    $("calview").hidden = section !== "cal";
+    [["putz", "tabputz"], ["shop", "tabshop"], ["cook", "tabcook"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"]].forEach(function (p) {
       var b = $(p[1]);
       if (section === p[0]) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
@@ -1058,11 +1677,59 @@
 
   /* Start */
   ROOMS.forEach(function (r) { $("newroom").append(h("option", { value: r }, r)); });
-  INTERVALS.forEach(function (i) { $("newint").append(h("option", { value: String(i[0]), selected: i[0] === 7 }, i[1])); });
+  intervalOptions($("newint"), 7);
+  function syncNewInt() {
+    var v = $("newint").value;
+    $("newcustom").hidden = v !== "custom";
+    $("newn").disabled = v !== "custom";   // ausgeblendete Felder dürfen das Absenden nicht blockieren
+    $("newstartlbl").hidden = v === "demand";
+  }
+  $("newint").addEventListener("change", syncNewInt);
+  syncNewInt();
 
   $("tabputz").addEventListener("click", function () { section = "putz"; lsSet("pp-section", "putz"); syncControls(); });
   $("tabshop").addEventListener("click", function () { section = "shop"; lsSet("pp-section", "shop"); syncControls(); });
   $("tabcook").addEventListener("click", function () { section = "cook"; lsSet("pp-section", "cook"); syncControls(); });
+  $("tabcal").addEventListener("click", function () { section = "cal"; lsSet("pp-section", "cal"); syncControls(); renderCal(); });
+  $("calprev").addEventListener("click", function () { calStep(-1); });
+  $("calnext").addEventListener("click", function () { calStep(1); });
+  $("caltoday").addEventListener("click", function () { calAnchor = calSel = dn(todayStr()); renderCal(); });
+  $("calmode").addEventListener("click", function (e) {
+    var v = e.target.getAttribute && e.target.getAttribute("data-v");
+    if (v !== "month" && v !== "week") return;
+    calMode = v; lsSet("pp-calmode", v);
+    if (v === "week") calAnchor = calSel; else calAnchor = calSel;
+    renderCal();
+  });
+  $("icspick").addEventListener("click", function () { $("icsfile").click(); });
+  $("icsfile").addEventListener("change", function (e) { readIcsFile(e.target.files && e.target.files[0]); e.target.value = ""; });
+  $("icsexport").addEventListener("click", exportIcs);
+  $("icsclear").addEventListener("click", clearImported);
+  $("evall").addEventListener("change", syncEvAll);
+  $("evcancel").addEventListener("click", closeEv);
+  $("evdel").addEventListener("click", function () {
+    if (!evDraft || !evDraft.id || !db) return;
+    if (!confirmEvDel) { confirmEvDel = true; $("evdel").textContent = "Ja, Termin löschen"; $("evdel").className = "linkbtn danger"; return; }
+    var id = evDraft.id;
+    db.doc("events/" + id).delete().then(function () { closeEv(); toast("Termin gelöscht."); }).catch(writeFail);
+  });
+  $("evform").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
+    var title = $("evtitle").value.trim();
+    if (!title) { toast("Gib dem Termin einen Namen."); $("evtitle").focus(); return; }
+    var date = $("evdate").value, endDate = $("evend").value, all = $("evall").checked;
+    if (!date) { toast("Wähle ein Datum."); return; }
+    if (endDate && endDate < date) { toast("Das Enddatum liegt vor dem Startdatum."); return; }
+    var st = all ? "" : $("evstart").value, en = all ? "" : $("evfinish").value;
+    if (!all && !st) { toast("Gib eine Startzeit ein oder wähle „ganztägig“."); return; }
+    if (!all && en && (!endDate || endDate === date) && en < st) { toast("Die Endzeit liegt vor der Startzeit."); return; }
+    var doc = { title: title, who: $("evwho").value, date: date, endDate: endDate && endDate !== date ? endDate : "", allDay: all, start: st, end: en, place: $("evplace").value.trim(), note: $("evnote").value.trim() };
+    var p;
+    if (evDraft && evDraft.id) p = db.doc("events/" + evDraft.id).update(doc);
+    else { doc.by = me || ""; doc.at = Date.now(); p = db.collection("events").add(doc); }
+    p.then(function () { calSel = dn(date); calAnchor = calSel; closeEv(); toast("„" + title + "“ ist im Kalender."); }).catch(writeFail);
+  });
   $("tabspend").addEventListener("click", function () { section = "spend"; lsSet("pp-section", "spend"); syncControls(); renderSpend(); });
   $("budgetsel").addEventListener("change", function (e) {
     curBudget = e.target.value; lsSet("pp-budget", curBudget); budgetForm = null; formBudget = null; renderSpend();
@@ -1075,7 +1742,8 @@
     if (!confirmBudgetDel) { confirmBudgetDel = true; renderSpend(); return; }
     confirmBudgetDel = false;
     var chain = Promise.resolve();
-    spends.filter(function (s) { return s.budget === b.id; }).forEach(function (s) { chain = chain.then(function () { return db.doc("spend/" + s.id).delete(); }); });
+    if (b.repeat === true) chain = chain.then(function () { return stopBudgetSeries(b); });
+    spends.filter(function (s) { return s.budget === b.id; }).forEach(function (s) { chain = chain.then(function () { return s.repeat ? stopSpendSeries(s) : null; }).then(function () { return db.doc("spend/" + s.id).delete(); }); });
     chain.then(function () { return db.doc("budgets/" + b.id).delete(); }).then(function () {
       curBudget = null; budgetForm = null; formBudget = null; toast("Budget gelöscht."); renderSpend();
     }).catch(writeFail);
@@ -1087,10 +1755,10 @@
     if (!start || !end) { toast("Wähle ein Start- und ein Enddatum."); return; }
     if (end < start) { toast("Das Enddatum liegt vor dem Startdatum."); return; }
     if (!cents) { toast("Gib das Budget als Betrag ein, z. B. 400."); return; }
-    var doc = { name: $("bname").value.trim(), start: start, end: end, amount: cents };
+    var doc = { name: $("bname").value.trim(), start: start, end: end, amount: cents, repeat: $("brepeat").checked };
     var p;
     if (budgetForm === "edit") { var b = resolveBudget(); p = db.doc("budgets/" + b.id).update(doc).then(function () { return b.id; }); }
-    else { doc.at = Date.now(); p = db.collection("budgets").add(doc).then(function (ref) { return ref.id; }); }
+    else { var bref = db.collection("budgets").doc(); doc.at = Date.now(); doc.series = bref.id; p = bref.set(doc).then(function () { return bref.id; }); }
     p.then(function (id) {
       curBudget = id; lsSet("pp-budget", id); budgetForm = null; formBudget = null; renderSpend(); toast("Budget gespeichert.");
     }).catch(writeFail);
@@ -1104,9 +1772,12 @@
     if (!cents) { toast("Gib einen Betrag ein, z. B. 12,50."); $("samount").focus(); return; }
     var date = $("sdate").value || todayStr();
     var doc = { budget: b.id, amount: cents, category: $("scat").value.trim() || "Sonstiges", place: $("splace").value.trim(), what: $("swhat").value.trim(), date: date, by: me || "", at: Date.now() };
-    db.collection("spend").add(doc).then(function () {
-      $("samount").value = ""; $("swhat").value = ""; $("splace").value = "";
-      toast(eur(cents) + " eingetragen.");
+    var rep = $("srepeat").value;
+    var sref = db.collection("spend").doc();
+    if (REPEAT_LABEL[rep]) { doc.repeat = rep; doc.series = sref.id; doc.origin = date; }
+    sref.set(doc).then(function () {
+      $("samount").value = ""; $("swhat").value = ""; $("splace").value = ""; $("srepeat").value = "";
+      toast(eur(cents) + " eingetragen." + (doc.repeat ? " Wiederholt sich " + REPEAT_LABEL[rep] + "." : ""));
       $("samount").focus();
     }).catch(writeFail);
   });
@@ -1170,21 +1841,26 @@
     if (!name) return;
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
     var who = $("newwho").value;
+    var days = readInterval($("newint"), $("newn"), $("newunit"));
+    if (days === null) { toast("Bitte bei „Eigener Abstand“ eine Zahl von 1 bis 999 eingeben."); return; }
+    var pv = readPoints($("newpoints"));
+    if (pv === null) { toast("Punkte: bitte eine ganze Zahl von 1 bis 10 eingeben."); return; }
     var doc = {
       name: name,
       room: $("newroom").value,
-      intervalDays: Number($("newint").value),
+      intervalDays: days,
+      points: pv,
       assignee: who,
       turn: who === "abwechselnd" ? "F" : "",
-      lastDone: $("newstart").value === "later" ? todayStr() : "",
+      lastDone: days > 0 && $("newstart").value === "later" ? todayStr() : "",
       lastBy: "",
       countF: 0,
       countC: 0,
       createdAt: todayStr()
     };
     db.collection("tasks").add(doc).then(function () {
-      $("newname").value = "";
-      toast("„" + name + "“ ist im Plan.");
+      $("newname").value = ""; $("newpoints").value = "1";
+      toast("„" + name + "“ ist im Plan" + (days === 0 ? " (nach Bedarf)." : "."));
     }).catch(writeFail);
   });
 
@@ -1194,7 +1870,7 @@
   render();
 
   /* ---------- Daten: Supabase (über js/store-supabase.js) ---------- */
-  var COLLS = ["tasks", "log", "stores", "shop", "recipes", "plan", "budgets", "spend"];
+  var COLLS = ["tasks", "log", "stores", "shop", "recipes", "plan", "budgets", "spend", "events"];
   var dataStarted = false;
 
   function listen(coll, apply) {
@@ -1220,8 +1896,10 @@
       budgets = a;
       if (!budgets.length && !budgetForm) openBudgetForm("new", null);
       renderSpend();
+      ensureRepeats();
     });
-    listen("spend", function (a) { spends = a; renderSpend(); });
+    listen("events", function (a) { events = a; eventsLoaded = true; if (!evDraft) renderCal(); });
+    listen("spend", function (a) { spends = a; spendsLoaded = true; renderSpend(); ensureRepeats(); });
     store.start();
   }
 
@@ -1358,7 +2036,7 @@
   function authState(kind) {
     showView("auth");
     $("loginform").hidden = kind !== "login";
-    $("recform").hidden = kind !== "recover";
+    $("pwform").hidden = kind !== "recover";
     $("setupbox").hidden = kind !== "setup";
     $("authmsg").textContent = kind === "sdk"
       ? "Die Supabase-Bausteine konnten nicht geladen werden. Prüfe deine Internetverbindung oder Erweiterungen, die Skripte blockieren, und lade die Seite neu."
@@ -1411,7 +2089,7 @@
         .then(function (r) { if (r.error) throw r.error; err.textContent = "Wenn es dieses Konto gibt, ist eine E-Mail zum Zurücksetzen unterwegs."; })
         .catch(function (ex) { err.textContent = loginError(ex); });
     });
-    $("recform").addEventListener("submit", function (e) {
+    $("pwform").addEventListener("submit", function (e) {
       e.preventDefault();
       var err = $("recerr"), btn = $("recbtn"), a = $("rpass").value, b = $("rpass2").value;
       err.textContent = "";
@@ -1450,6 +2128,8 @@
     }).catch(function () { authState("sdk"); });
   }
 
+  window.addEventListener("error", function (e) { try { toast("Ein Fehler ist aufgetreten: " + String(e && e.message || "unbekannt").slice(0, 140), null, null, true); } catch (x) {} });
+  window.addEventListener("unhandledrejection", function (e) { try { toast("Ein Fehler ist aufgetreten: " + String(e && e.reason && e.reason.message || "unbekannt").slice(0, 140), null, null, true); } catch (x) {} });
   $("doexport").addEventListener("click", exportData);
   $("doimport").addEventListener("click", function () { $("importfile").click(); });
   $("importfile").addEventListener("change", function (e) { readImportFile(e.target.files && e.target.files[0]); e.target.value = ""; });
