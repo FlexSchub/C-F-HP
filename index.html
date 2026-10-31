@@ -55,7 +55,8 @@
       <span class="date" id="today"></span>
     </div>
     <nav class="tabs" aria-label="Bereiche">
-      <button class="tab" type="button" id="tabputz" aria-current="page">Putzplan</button>
+      <button class="tab" type="button" id="tabhome">Heute</button>
+      <button class="tab" type="button" id="tabputz">Putzplan</button>
       <button class="tab" type="button" id="tabshop">Einkauf</button>
       <button class="tab" type="button" id="tabcook">Kochbuch</button>
       <button class="tab" type="button" id="tabmeal">Essensplan</button>
@@ -63,6 +64,11 @@
       <button class="tab" type="button" id="tabspend">Ausgaben</button>
     </nav>
   </header>
+
+  <section class="col" id="homeview" hidden>
+    <p class="headline" id="homehead" aria-live="polite">Hallo!</p>
+    <div class="col" id="homemain"></div>
+  </section>
 
   <div class="col" id="putzview">
   <div class="seg viewseg" id="view" role="group" aria-label="Ansicht">
@@ -166,6 +172,7 @@
       <input id="quickname" type="text" list="knownitems" maxlength="120" enterkeyhint="done" autocapitalize="sentences" aria-label="Artikel hinzufügen" placeholder="Artikel hinzufügen …">
       <button class="primary" type="submit">Hinzufügen</button>
     </form>
+    <div class="bought alsorow" id="alsorow" hidden></div>
     <datalist id="knownitems"></datalist>
 
     <form class="panel" id="storeform" autocomplete="off" hidden>
@@ -214,7 +221,9 @@
       <button class="linkbtn" type="button" id="weektoday">Diese Woche</button>
     </div>
     <div class="col" id="mealdays" style="gap:10px"></div>
-    <button class="primary" type="button" id="mealshop" hidden>Zutaten einkaufen</button>
+    <button class="primary" type="button" id="mealshop" hidden>Woche festlegen und Zutaten prüfen</button>
+    <p class="fair" id="mealshopnote" hidden>✓ Die Zutaten aller geplanten Gerichte dieser Woche sind geprüft und stehen auf den Einkaufslisten.</p>
+    <button class="linkbtn" type="button" id="mealshopagain" hidden>Zutaten noch einmal prüfen</button>
   </section>
 
   <section class="col" id="calview" hidden>
