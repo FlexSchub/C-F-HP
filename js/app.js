@@ -23,7 +23,7 @@
   var view = "plan";
   var toastTimer = null;
   var sv = lsGet("pp-section");
-  var section = sv === "shop" || sv === "cook" || sv === "meal" || sv === "cal" || sv === "spend" ? sv : "putz";
+  var section = sv === "shop" || sv === "cook" || sv === "meal" || sv === "cal" || sv === "spend" || sv === "putz" ? sv : "home";
   var events = [], eventsLoaded = false;
   var calMode = lsGet("pp-calmode") === "week" ? "week" : "month";
   var calAnchor = 0, calSel = 0;      // Tage seit 1970 (werden unten gesetzt)
@@ -48,6 +48,8 @@
   var cookTab = "menu";
   var cookPeriod = "90";
   var mealIds = [];
+  var mealCtx = { slots: [], all: [], allIds: [] };
+  var pantryCtx = null;
   var stores = null;         // null = lädt noch
   var items = [];            // Einkaufsartikel aller Läden
   var curStore = lsGet("pp-store");
@@ -468,22 +470,98 @@
     box.append(h("p", { class: "foot" }, "Gezählt wird ab dem ersten Abhaken in dieser Version."));
   }
 
+  /* Einkauf: Mengen und Gänge */
+  var AISLES = ["Obst & Gemüse", "Brot & Backwaren", "Kühlregal", "Fleisch & Fisch", "Tiefkühl", "Vorrat & Konserven", "Getränke", "Süßes & Snacks", "Drogerie & Haushalt", "Sonstiges"];
+  var AISLE_WORDS = [
+    ["Tiefkühl", ["tiefkühl", "tk", "pommes", "fischstäbchen", "gefroren", "eiscreme", "speiseeis", "eis", "rahmspinat"]],
+    ["Drogerie & Haushalt", ["zahnpasta", "zahnbürste", "shampoo", "duschgel", "seife", "spülmittel", "spülmaschinentabs", "waschmittel", "weichspüler", "klopapier", "toilettenpapier", "küchenrolle", "küchentuch", "müllbeutel", "müllsack", "taschentücher", "deo", "backpapier", "alufolie", "frischhaltefolie", "schwamm", "reiniger", "windeln", "tampons", "binden", "creme", "batterie", "glühbirne", "rasier", "wattepads", "mundwasser", "zahnseide", "gefrierbeutel", "kerzen", "streichhölzer", "tabs"]],
+    ["Getränke", ["wasser", "saft", "cola", "limo", "bier", "sekt", "schorle", "kaffee", "tee", "sprudel", "getränk", "energy", "rotwein", "weißwein", "wein", "sirup", "mate", "fanta", "sprite"]],
+    ["Süßes & Snacks", ["schoko", "keks", "chips", "gummi", "bonbon", "riegel", "snack", "popcorn", "salzstangen", "cracker", "nutella", "lakritz", "waffel", "praline", "kuchen"]],
+    ["Vorrat & Konserven", ["passiert", "dose", "konserve", "kokosmilch", "currypaste", "kichererbsen", "bohnen", "linsen", "mais", "nudel", "spaghetti", "pasta", "penne", "fusilli", "reis", "mehl", "zucker", "salz", "pfeffer", "öl", "essig", "soße", "sauce", "gewürz", "brühe", "haferflocken", "müsli", "cornflakes", "couscous", "bulgur", "honig", "marmelade", "erdnuss", "nüsse", "backpulver", "hefe", "stärke", "senf", "ketchup", "mayo", "passata", "tomatenmark", "pizzasauce", "pesto", "oliven", "thunfisch", "sardinen", "suppe", "kartoffelpüree", "paniermehl", "vanille", "kakao", "rosinen", "semmelbrösel"]],
+    ["Fleisch & Fisch", ["hack", "hähnchen", "huhn", "hühner", "pute", "rind", "schwein", "wurst", "schinken", "speck", "lachs", "fisch", "garnelen", "steak", "filet", "bratwurst", "salami", "gyros", "schnitzel", "fleisch", "leberwurst", "mett", "aufschnitt"]],
+    ["Kühlregal", ["milch", "butter", "käse", "joghurt", "quark", "sahne", "ei", "eier", "mozzarella", "parmesan", "gouda", "feta", "frischkäse", "schmand", "margarine", "skyr", "crème", "pudding", "tofu", "hummus", "kefir", "buttermilch", "pizzateig", "teig", "tzatziki", "mascarpone", "ricotta", "halloumi", "creme fraiche", "frischkäse"]],
+    ["Brot & Backwaren", ["brot", "brötchen", "toast", "baguette", "croissant", "brezel", "tortilla", "wrap", "fladenbrot", "laugen", "semmel", "knäcke", "zwieback", "burgerbrötchen"]],
+    ["Obst & Gemüse", ["apfel", "äpfel", "banane", "birne", "orange", "zitrone", "limette", "tomate", "gurke", "paprika", "zwiebel", "knoblauch", "kartoffel", "möhre", "karotte", "salat", "spinat", "brokkoli", "zucchini", "pilz", "champignon", "beere", "trauben", "avocado", "ingwer", "lauch", "kohl", "kürbis", "aubergine", "petersilie", "basilikum", "schnittlauch", "obst", "gemüse", "kräuter", "mango", "melone", "pfirsich", "kiwi", "radieschen", "sellerie", "ananas", "erdbeer", "himbeer", "blumenkohl", "rosenkohl", "fenchel", "rucola", "koriander", "minze", "dill", "frühlingszwiebel", "süßkartoffel", "mandarine", "nektarine", "pflaume", "kirsche"]]
+  ];
+  function wordMatch(t, w) {
+    if (w.length <= 2) return t === w;
+    if (w.length === 3) return t.indexOf(w) === 0;
+    return t.indexOf(w) >= 0;
+  }
+  function guessAisle(name) {
+    var tokens = String(name).toLowerCase().split(/[^a-zäöüß]+/).filter(Boolean);
+    for (var g = 0; g < AISLE_WORDS.length; g++) {
+      var words = AISLE_WORDS[g][1];
+      for (var i = 0; i < words.length; i++) for (var j = 0; j < tokens.length; j++) if (wordMatch(tokens[j], words[i])) return AISLE_WORDS[g][0];
+    }
+    return "Sonstiges";
+  }
+  function aisleOf(it) { return AISLES.indexOf(it.aisle) >= 0 ? it.aisle : guessAisle(it.name); }
+  var QTY_UNITS = "kg|mg|g|ml|cl|liter|l|stück|stk|st|pckg|pck|pkg|packungen|packung|pack|dosen|dose|bund|becher|flaschen|flasche|gläser|glas|tüten|tüte|rollen|rolle|kasten|x|×";
+  var QTY_RE = new RegExp("^(\\d+(?:[.,]\\d+)?)\\s*(" + QTY_UNITS + ")?\\.?\\s+(\\S.*)$", "i");
+  function parseItem(text) {
+    var t = String(text).trim().replace(/\s+/g, " ");
+    var m = QTY_RE.exec(t);
+    if (!m) return { qty: "", name: t };
+    var unit = (m[2] || "").toLowerCase();
+    var qty = unit === "x" || unit === "×" ? m[1] + "×" : m[1] + (unit ? " " + unit : "");
+    return { qty: qty, name: m[3] };
+  }
+  function qtySplit(q) {
+    var m = /^(\d+(?:[.,]\d+)?)\s*(.*)$/.exec(String(q || "").trim());
+    return m ? { n: parseFloat(m[1].replace(",", ".")), u: m[2].trim().toLowerCase() } : null;
+  }
+  function qtyAdd(a, b) {
+    var x = qtySplit(a), y = qtySplit(b);
+    if (!x || !y || x.u !== y.u) return null;
+    var n = Math.round((x.n + y.n) * 100) / 100;
+    var str = String(n).replace(".", ",");
+    return x.u === "×" || x.u === "x" ? str + "×" : str + (x.u ? " " + x.u : "");
+  }
+  function bumpHist(it) {
+    var st = (stores || []).filter(function (x) { return x.id === it.store; })[0];
+    if (!st || !db) return;
+    var hist = Array.isArray(st.hist) ? st.hist.map(function (x) { return Object.assign({}, x); }) : [];
+    var key = String(it.name).toLowerCase();
+    var e = hist.filter(function (x) { return String(x.n).toLowerCase() === key; })[0];
+    var now = Date.now();
+    var others = it.grp ? items.filter(function (i) { return i.grp === it.grp && i.store !== it.store && storeName(i.store); }).map(function (i) { return i.store; }) : [];
+    if (e) { e.c = (e.c || 0) + 1; e.t = now; e.a = aisleOf(it); if (others.length) e.o = others; else delete e.o; }
+    else { e = { n: String(it.name).slice(0, 60), c: 1, t: now, a: aisleOf(it) }; if (others.length) e.o = others; hist.push(e); }
+    hist.sort(function (a, b) { return (b.c || 0) - (a.c || 0) || (b.t || 0) - (a.t || 0); });
+    db.doc("stores/" + st.id).update({ hist: hist.slice(0, 30) }).catch(function () {});
+  }
+  var editItemId = null;
+  var alsoSel = {}, alsoFor = null;
+  var aisleSort = lsGet("pp-aisle") !== "off";
+
   /* Einkauf: Aktionen */
   function setDone(it, done) {
     if (!db) return;
-    var upd = done ? { done: true, doneAt: Date.now(), by: me || "" } : { done: false, at: Date.now(), by: me || "" };
-    db.doc("shop/" + it.id).update(upd).catch(writeFail);
+    var group = it.grp ? items.filter(function (i) { return i.grp === it.grp; }) : [];
+    if (!group.some(function (i) { return i.id === it.id; })) group.push(it);
+    group.forEach(function (g) {
+      if (!!g.done === !!done && g.id !== it.id) return;
+      if (done) bumpHist(g);
+      var upd = done ? { done: true, doneAt: Date.now(), by: me || "" } : { done: false, at: Date.now(), by: me || "" };
+      db.doc("shop/" + g.id).update(upd).catch(writeFail);
+    });
   }
   function delItem(it) { if (db) db.doc("shop/" + it.id).delete().catch(writeFail); }
   function addItems(text) {
     if (!db || !curStore) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
     var seen = {};
-    text.split(",").map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (n) {
+    text.replace(/(\d),(\d)/g, "$1\u0001$2").split(",").map(function (s) { return s.replace(/\u0001/g, ",").trim(); }).filter(Boolean).forEach(function (n) {
       var key = n.toLowerCase();
       if (seen[key]) return;
       seen[key] = true;
-      if (putOnList(curStore, n) === "dup") toast("„" + n + "“ steht schon auf der Liste.");
+      if (putMulti(curStore, n, undefined, alsoIds()) === "dup") toast("„" + parseItem(n).name + "“ steht schon auf der Liste.");
     });
+  }
+  function alsoIds() {
+    var ids = Object.keys(alsoSel).filter(function (k) { return alsoSel[k] && storeName(k) && k !== curStore; });
+    alsoSel = {};
+    return ids.length ? ids : undefined;
   }
   function addStore(name) {
     name = name.trim();
@@ -514,6 +592,66 @@
     chain.catch(writeFail);
   }
 
+  function siblings(it) { return it.grp ? items.filter(function (i) { return i.grp === it.grp && i.id !== it.id && storeName(i.store); }) : []; }
+  function alsoLabel(it) {
+    var names = siblings(it).filter(function (i) { return !i.done; }).map(function (i) { return storeName(i.store); });
+    return names.length ? h("span", { class: "also" }, " · auch " + names.join(", ")) : null;
+  }
+  function editItemRow(it, chk) {
+    var q = h("input", { type: "text", maxlength: "20", placeholder: "Menge", value: it.qty || "", "aria-label": "Menge" });
+    var n = h("input", { type: "text", maxlength: "80", value: it.name, "aria-label": "Artikel", required: true });
+    var a = h("select", { "aria-label": "Gang im Laden" });
+    AISLES.forEach(function (x) { a.append(h("option", { value: x, selected: x === aisleOf(it) }, x)); });
+    var sib = siblings(it), want = {};
+    sib.forEach(function (i) { want[i.store] = true; });
+    var others = (stores || []).filter(function (x) { return x.id !== it.store; });
+    var alsoBox = null;
+    if (others.length) {
+      alsoBox = h("div", { class: "bought" });
+      others.forEach(function (x) {
+        var b = h("button", { class: "bchip" + (want[x.id] ? " sel" : ""), type: "button", "aria-pressed": String(!!want[x.id]), onclick: function () {
+          want[x.id] = !want[x.id]; b.classList.toggle("sel", !!want[x.id]); b.setAttribute("aria-pressed", String(!!want[x.id]));
+        } }, x.name);
+        alsoBox.append(b);
+      });
+    }
+    var save = function () {
+      var name = n.value.trim();
+      if (!name) { toast("Der Artikel braucht einen Namen."); return; }
+      var qty = q.value.trim(), aisle = a.value;
+      var wantIds = others.filter(function (x) { return want[x.id]; }).map(function (x) { return x.id; });
+      var grp = wantIds.length ? (it.grp || newGrp()) : "";
+      var upd = { name: name, qty: qty, aisle: aisle, grp: grp };
+      db.doc("shop/" + it.id).update(upd).then(function () {
+        sib.forEach(function (i) {
+          if (wantIds.indexOf(i.store) >= 0) db.doc("shop/" + i.id).update({ name: name, qty: qty, aisle: aisle, grp: grp }).catch(writeFail);
+          else db.doc("shop/" + i.id).update({ grp: "" }).catch(writeFail);
+        });
+        wantIds.forEach(function (sid) {
+          if (sib.some(function (i) { return i.store === sid; })) return;
+          var ex = items.filter(function (i) { return i.store === sid && String(i.name).toLowerCase() === name.toLowerCase(); })[0];
+          if (ex) db.doc("shop/" + ex.id).update({ grp: grp, done: false, at: Date.now() }).catch(writeFail);
+          else db.collection("shop").add({ store: sid, name: name, qty: qty, aisle: aisle, done: false, grp: grp, by: me || "", at: Date.now() }).catch(writeFail);
+        });
+        var st = (stores || []).filter(function (x) { return x.id === it.store; })[0];
+        if (st && Array.isArray(st.hist) && aisle !== aisleOf(it)) {
+          var key = name.toLowerCase();
+          var hist = st.hist.map(function (x) { return String(x.n).toLowerCase() === key ? Object.assign({}, x, { a: aisle }) : x; });
+          db.doc("stores/" + st.id).update({ hist: hist }).catch(function () {});
+        }
+        editItemId = null; renderShop();
+      }).catch(writeFail);
+    };
+    var li = h("li", { class: "editrow" }, chk,
+      h("form", { class: "itemedit", onsubmit: function (e) { e.preventDefault(); save(); } },
+        h("div", { class: "qn" }, q, n), a,
+        alsoBox ? h("div", { class: "alsobox" }, h("span", { class: "hint" }, "Steht auch auf der Liste von:"), alsoBox) : null,
+        h("div", { class: "row" },
+          h("button", { class: "primary", type: "submit" }, "Speichern"),
+          h("button", { class: "linkbtn", type: "button", onclick: function () { editItemId = null; renderShop(); } }, "Abbrechen"))));
+    return li;
+  }
+
   /* Einkauf: Darstellung */
   function shopCount(id) { var n = 0; items.forEach(function (i) { if (i.store === id && !i.done) n++; }); return n; }
   function renderShop() {
@@ -540,6 +678,19 @@
     $("quickform").hidden = !st || showStoreForm;
     $("quickname").placeholder = st ? "Zu " + st.name + " hinzufügen …" : "Artikel hinzufügen …";
 
+    if (alsoFor !== curStore) { alsoSel = {}; alsoFor = curStore; }
+    var ar = $("alsorow"); ar.replaceChildren();
+    var otherSt = list.filter(function (s) { return s.id !== curStore; });
+    ar.hidden = !st || showStoreForm || !otherSt.length;
+    if (!ar.hidden) {
+      ar.append(h("span", { class: "hint" }, "Auch kaufbar bei:"));
+      otherSt.forEach(function (s) {
+        var b = h("button", { class: "bchip" + (alsoSel[s.id] ? " sel" : ""), type: "button", "aria-pressed": String(!!alsoSel[s.id]), onclick: function () {
+          alsoSel[s.id] = !alsoSel[s.id]; b.classList.toggle("sel", !!alsoSel[s.id]); b.setAttribute("aria-pressed", String(!!alsoSel[s.id]));
+        } }, s.name);
+        ar.append(b);
+      });
+    }
     var dl = $("knownitems"); dl.replaceChildren();
     var known = {};
     items.forEach(function (i) { if (i.store === curStore && i.done && !known[i.name]) { known[i.name] = true; dl.append(h("option", { value: i.name })); } });
@@ -552,6 +703,13 @@
 
     var mine = items.filter(function (i) { return i.store === st.id; });
     var open = mine.filter(function (i) { return !i.done; }).sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+    var openKeys = {}; open.forEach(function (i) { openKeys[String(i.name).toLowerCase()] = true; });
+    var favs = (Array.isArray(st.hist) ? st.hist : []).filter(function (x) { return x && x.n && !openKeys[String(x.n).toLowerCase()]; }).slice(0, 10);
+    if (favs.length) {
+      var fc = h("div", { class: "bought" });
+      favs.forEach(function (x) { fc.append(h("button", { class: "bchip", type: "button", onclick: function () { putMulti(st.id, x.n, x.a); } }, x.n)); });
+      body.append(h("section", { class: "group" }, h("h2", null, "Oft gekauft"), fc));
+    }
     var done = mine.filter(function (i) { return i.done; }).sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); });
 
     if (!open.length) {
@@ -559,14 +717,30 @@
         h("b", null, mine.length ? "Alles für " + st.name + " eingekauft" : "Noch nichts für " + st.name),
         h("span", null, mine.length ? "Tippe unten auf einen Artikel, um ihn wieder auf die Liste zu setzen." : "Schreib oben den ersten Artikel hinein. Mehrere gehen mit Komma: Milch, Brot, Butter.")));
     } else {
-      var ul = h("ul", { class: "items" });
-      open.forEach(function (it) {
+      var sortRow = h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: function () { aisleSort = !aisleSort; lsSet("pp-aisle", aisleSort ? "on" : "off"); renderShop(); } }, aisleSort ? "Sortiert nach Gang im Laden · ändern" : "Sortiert nach Hinzufügen · ändern"));
+      body.append(sortRow);
+      var mkRow = function (it) {
         var chk = h("button", { class: "check", type: "button", "aria-label": "Gekauft: " + it.name, onclick: function () { setDone(it, true); } });
         chk.innerHTML = CHECK;
-        ul.append(h("li", null, chk, h("span", { class: "nm" }, it.name),
-          h("button", { class: "x", type: "button", "aria-label": it.name + " von der Liste entfernen", onclick: function () { delItem(it); } }, "×")));
-      });
-      body.append(ul);
+        if (editItemId === it.id) return editItemRow(it, chk);
+        return h("li", null, chk,
+          h("button", { class: "nm nmbtn", type: "button", "aria-label": "Bearbeiten: " + it.name, onclick: function () { editItemId = it.id; renderShop(); } },
+            it.qty ? h("b", { class: "qty" }, it.qty + " ") : null, it.name, alsoLabel(it)),
+          h("button", { class: "x", type: "button", "aria-label": it.name + " von der Liste entfernen", onclick: function () { delItem(it); } }, "×"));
+      };
+      if (aisleSort) {
+        AISLES.forEach(function (a) {
+          var part = open.filter(function (i) { return aisleOf(i) === a; });
+          if (!part.length) return;
+          var ul2 = h("ul", { class: "items" });
+          part.forEach(function (it) { ul2.append(mkRow(it)); });
+          body.append(h("section", { class: "group" }, h("h2", null, a, h("span", { class: "n" }, String(part.length))), ul2));
+        });
+      } else {
+        var ul = h("ul", { class: "items" });
+        open.forEach(function (it) { ul.append(mkRow(it)); });
+        body.append(ul);
+      }
     }
 
     if (done.length) {
@@ -600,12 +774,42 @@
   function sortedStores() { return (stores || []).slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0) || String(a.name).localeCompare(String(b.name), "de"); }); }
   function storeName(id) { var s = (stores || []).filter(function (x) { return x.id === id; })[0]; return s ? s.name : ""; }
   function resolveStore(id) { if (id && storeName(id)) return id; var l = sortedStores(); return l.length ? l[0].id : ""; }
-  function putOnList(storeId, name) {
-    var key = String(name).toLowerCase();
+  function newGrp() { return "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function putMulti(storeId, rawName, aisleHint, also) {
+    var name = parseItem(rawName).name, key = name.toLowerCase();
+    if (!also) {
+      var st = (stores || []).filter(function (x) { return x.id === storeId; })[0];
+      var e = st && Array.isArray(st.hist) ? st.hist.filter(function (x) { return String(x.n).toLowerCase() === key; })[0] : null;
+      also = e && Array.isArray(e.o) ? e.o : [];
+    }
+    var targets = [];
+    also.forEach(function (id) { if (id !== storeId && storeName(id) && targets.indexOf(id) < 0) targets.push(id); });
+    if (!targets.length) return putOnList(storeId, rawName, aisleHint);
+    var grp = newGrp();
+    var res = putOnList(storeId, rawName, aisleHint, grp);
+    targets.forEach(function (id) { putOnList(id, rawName, aisleHint, grp); });
+    return res;
+  }
+  function putOnList(storeId, rawName, aisleHint, grp) {
+    var pi = parseItem(rawName), name = pi.name, qty = pi.qty;
+    var key = name.toLowerCase();
     var ex = items.filter(function (i) { return i.store === storeId && String(i.name).toLowerCase() === key; })[0];
-    if (ex && ex.done) { setDone(ex, false); return "back"; }
-    if (ex) return "dup";
-    db.collection("shop").add({ store: storeId, name: name, done: false, by: me || "", at: Date.now() }).catch(writeFail);
+    if (ex && ex.done) {
+      var upd0 = { done: false, at: Date.now(), by: me || "", qty: qty };
+      if (grp) upd0.grp = grp;
+      db.doc("shop/" + ex.id).update(upd0).catch(writeFail);
+      return "back";
+    }
+    if (ex) {
+      var sum = qty && ex.qty ? qtyAdd(ex.qty, qty) : null;
+      var upd1 = sum ? { qty: sum } : {};
+      if (grp) upd1.grp = grp;
+      if (sum || grp) { db.doc("shop/" + ex.id).update(upd1).catch(writeFail); return sum ? "merged" : "dup"; }
+      return "dup";
+    }
+    var doc = { store: storeId, name: name, qty: qty, aisle: AISLES.indexOf(aisleHint) >= 0 ? aisleHint : guessAisle(name), done: false, by: me || "", at: Date.now() };
+    if (grp) doc.grp = grp;
+    db.collection("shop").add(doc).catch(writeFail);
     return "added";
   }
   function guessStore(name) {
@@ -628,18 +832,26 @@
   function effortText(n) { n = Math.round(Number(n)); if (!(n >= 1 && n <= 5)) return ""; return "●".repeat(n) + "○".repeat(5 - n); }
   var EFFORT_NAMES = ["", "sehr leicht", "leicht", "mittel", "aufwendig", "sehr aufwendig"];
   function minutesText(m) { m = Math.round(Number(m)); if (!(m >= 1)) return ""; return m >= 60 ? Math.floor(m / 60) + " Std" + (m % 60 ? " " + (m % 60) + " Min" : "") : m + " Min"; }
+  var KIND_NAMES = { "": "Zutat", opt: "Optional (Topping, Extra)", stock: "Immer da (Gewürz, Vorrat)" };
+  function kindOf(g) { return g && (g.k === "opt" || g.k === "stock") ? g.k : ""; }
+  function mainIngs(r) { return (r.ingredients || []).filter(function (g) { return !kindOf(g); }); }
+  function extraIngs(r) { return (r.ingredients || []).filter(function (g) { return kindOf(g); }); }
+  function ingLine(r) {
+    var m = mainIngs(r).map(function (g) { return g.name; }).join(" · "), x = extraIngs(r).map(function (g) { return g.name; }).join(", ");
+    return (m || (x ? "" : "")) + (x ? (m ? " · " : "") + "optional/Vorrat: " + x : "");
+  }
   function dishEl(r) {
     var on = !!picked[r.id];
-    var ings = r.ingredients || [];
+    var ings = mainIngs(r), nExtra = extraIngs(r).length;
     var pick = h("button", { class: "pick", type: "button", "aria-pressed": String(on), "aria-label": (on ? "Abwählen: " : "Auswählen: ") + r.name, onclick: function () {
       if (picked[r.id]) delete picked[r.id]; else picked[r.id] = true;
       renderCook();
     } });
     pick.innerHTML = CHECK;
-    var names = ings.map(function (g) { return g.name; }).join(" · ");
+    var names = ingLine(r);
     return h("li", { class: "dish" + (on ? " on" : "") }, pick,
       h("div", { class: "dbody" },
-        h("div", { class: "dishhead" }, h("span", { class: "dname" }, r.name), h("span", { class: "lead" }), h("span", { class: "dcount" }, ings.length + (ings.length === 1 ? " Zutat" : " Zutaten"))),
+        h("div", { class: "dishhead" }, h("span", { class: "dname" }, r.name), h("span", { class: "lead" }), h("span", { class: "dcount" }, ings.length + (ings.length === 1 ? " Zutat" : " Zutaten") + (nExtra ? " + " + nExtra + " Extra" + (nExtra === 1 ? "" : "s") : ""))),
         (effortText(r.effort) || minutesText(r.minutes)) ? h("div", { class: "dmeta" },
           minutesText(r.minutes) ? h("span", { title: "Ungefähre Dauer" }, "⏱ " + minutesText(r.minutes)) : null,
           effortText(r.effort) ? h("span", { title: "Aufwand: " + EFFORT_NAMES[Math.round(Number(r.effort))], "aria-label": "Aufwand " + Math.round(Number(r.effort)) + " von 5, " + EFFORT_NAMES[Math.round(Number(r.effort))] }, "Aufwand " + effortText(r.effort)) : null) : null,
@@ -654,7 +866,8 @@
       lunch: Array.isArray(doc.lunch) ? doc.lunch : [],
       dinner: Array.isArray(doc.dinner) ? doc.dinner : (Array.isArray(doc.dishes) ? doc.dishes : []),
       outLunch: doc.outLunch === true, noteLunch: String(doc.noteLunch || ""),
-      outDinner: doc.outDinner === true, noteDinner: String(doc.noteDinner || "")
+      outDinner: doc.outDinner === true, noteDinner: String(doc.noteDinner || ""),
+      listedLunch: doc.listedLunch === true, listedDinner: doc.listedDinner === true
     };
   }
   function allDishes(doc) { var st = slotsOf(doc); return st.lunch.concat(st.dinner); }
@@ -765,8 +978,10 @@
     recipes.filter(function (r) { return picked[r.id]; }).forEach(function (r) {
       (r.ingredients || []).forEach(function (g) {
         var sid = resolveStore(g.store);
-        var key = sid + "|" + String(g.name).toLowerCase();
-        if (!map[key]) { map[key] = { name: g.name, store: sid, dishes: [], home: false }; order.push(key); }
+        var key = sid + "|" + String(g.name).toLowerCase(), kd = kindOf(g);
+        if (!map[key]) { map[key] = { name: g.name, store: sid, dishes: [], home: !!kd, kind: kd }; order.push(key); }
+        else if (map[key].kind && !kd) { map[key].kind = ""; map[key].home = false; }
+        else if (map[key].kind === "stock" && kd === "opt") map[key].kind = "opt";
         if (map[key].dishes.indexOf(r.name) < 0) map[key].dishes.push(r.name);
       });
     });
@@ -774,16 +989,35 @@
     setCookMode("pantry");
     renderPantry();
   }
+  function markListed() {
+    if (!pantryCtx) return;
+    var byDay = {};
+    pantryCtx.slots.forEach(function (sp) { (byDay[sp.ds] = byDay[sp.ds] || []).push(sp.slot); });
+    Object.keys(byDay).forEach(function (ds) {
+      var cur = slotsOf(plan[ds]);
+      byDay[ds].forEach(function (sl) { cur["listed" + (sl === "lunch" ? "Lunch" : "Dinner")] = true; });
+      saveDay(ds, cur);
+    });
+  }
+  function leavePantry(finished) {
+    if (finished) markListed();
+    var back = !!pantryCtx;
+    pantryCtx = null;
+    setCookMode("list");
+    if (back) { section = "meal"; lsSet("pp-section", "meal"); syncControls(); renderMeal(); }
+    renderCook();
+  }
   function renderPantry() {
     var box = $("cookpanel");
     box.replaceChildren();
-    var rows = pantry.rows;
-    var need = rows.filter(function (r) { return !r.home; }).length;
+    var allRows = pantry.rows, rows = allRows.filter(function (r) { return !r.kind; });
+    var extras = allRows.filter(function (r) { return r.kind; });
+    var need = allRows.filter(function (r) { return !r.home; }).length;
     var panel = h("div", { class: "panel" },
       h("h2", null, "Was ist schon zuhause?"),
       h("p", { class: "fair" }, "Hake an, was ihr noch auf Vorrat habt. Alles andere kommt auf die Einkaufslisten."));
     if (!rows.length) {
-      panel.append(h("p", { class: "note" }, "Die gewählten Gerichte haben noch keine Zutaten."));
+      panel.append(h("p", { class: "note" }, extras.length ? "Die gewählten Gerichte haben keine festen Zutaten." : "Die gewählten Gerichte haben noch keine Zutaten."));
     }
     var ids = sortedStores().map(function (s) { return s.id; });
     if (rows.some(function (r) { return ids.indexOf(r.store) < 0; })) ids.push("");
@@ -799,25 +1033,34 @@
       });
       panel.append(grp);
     });
+    [["opt", "Optional dazu"], ["stock", "Gewürze und Vorrat (meist da)"]].forEach(function (kk) {
+      var part = extras.filter(function (r) { return r.kind === kk[0]; });
+      if (!part.length) return;
+      var chips = h("div", { class: "bought xchips" });
+      part.forEach(function (r) {
+        chips.append(h("button", { class: "bchip" + (r.home ? "" : " sel"), type: "button", "aria-pressed": String(!r.home), title: "für " + r.dishes.join(", "), onclick: function () { r.home = !r.home; renderPantry(); } },
+          r.name + (ids.length > 1 && r.store ? " · " + storeName(r.store) : "")));
+      });
+      panel.append(h("div", { class: "pgroup" }, h("h3", null, kk[1]), h("p", { class: "fair" }, "Tippe an, was ihr dafür kaufen wollt. Sonst bleibt es weg von der Liste."), chips));
+    });
     panel.append(h("div", { class: "row" },
       h("button", { class: "primary", type: "button", onclick: confirmPantry }, need ? "Auf die Listen setzen (" + need + ")" : "Nichts kaufen, alles da"),
-      h("button", { class: "linkbtn", type: "button", onclick: function () { setCookMode("list"); renderCook(); } }, "Zurück")));
+      h("button", { class: "linkbtn", type: "button", onclick: function () { leavePantry(false); } }, "Zurück")));
     box.append(panel);
   }
   function confirmPantry() {
     var need = pantry.rows.filter(function (r) { return !r.home; });
-    if (!need.length) { picked = {}; setCookMode("list"); renderCook(); toast("Alles ist zuhause, es muss nichts gekauft werden."); return; }
+    if (!need.length) { picked = {}; leavePantry(true); toast("Alles ist zuhause, es muss nichts gekauft werden."); return; }
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
     if (!(stores || []).length) { toast("Lege zuerst im Einkauf einen Laden an."); return; }
     var counts = {};
     need.forEach(function (r) {
       var sid = resolveStore(r.store);
-      if (putOnList(sid, r.name) !== "dup") counts[sid] = (counts[sid] || 0) + 1;
+      if (putMulti(sid, r.name) !== "dup") counts[sid] = (counts[sid] || 0) + 1;
     });
     var ids = Object.keys(counts);
     picked = {};
-    setCookMode("list");
-    renderCook();
+    leavePantry(true);
     if (!ids.length) { toast("Alles stand schon auf euren Listen."); return; }
     var parts = ids.map(function (id) { return storeName(id) + " " + counts[id]; }).join(", ");
     toast("Auf den Listen: " + parts + ".", "Zum Einkauf", function () {
@@ -831,7 +1074,7 @@
   function openEditor(r) {
     confirmRecDel = false;
     if (r) {
-      draft = { id: r.id, name: r.name || "", at: r.at || 0, effort: Math.round(Number(r.effort)) || 0, minutes: Math.round(Number(r.minutes)) || 0, ings: (r.ingredients || []).map(function (g) { return { name: g.name || "", store: resolveStore(g.store), touched: true }; }) };
+      draft = { id: r.id, name: r.name || "", at: r.at || 0, effort: Math.round(Number(r.effort)) || 0, minutes: Math.round(Number(r.minutes)) || 0, ings: (r.ingredients || []).map(function (g) { return { name: g.name || "", store: resolveStore(g.store), touched: true, k: kindOf(g) }; }) };
     } else {
       draft = { id: null, name: "", at: 0, effort: 0, minutes: 0, ings: [] };
     }
@@ -878,7 +1121,9 @@
         if (!draft.ings.length) draft.ings.push({ name: "", store: resolveStore(curStore), touched: false });
         renderEditor();
       } }, "×");
-      panel.append(h("div", { class: "ingrow" }, nm, sel, rm));
+      var ksel = h("select", { class: "kindsel", "aria-label": "Art von Zutat " + (idx + 1), onchange: function (e) { g.k = e.target.value; } });
+      Object.keys(KIND_NAMES).forEach(function (kk) { ksel.append(h("option", { value: kk, selected: kk === (g.k || "") }, KIND_NAMES[kk])); });
+      panel.append(h("div", { class: "ingwrap" }, h("div", { class: "ingrow" }, nm, sel, rm), ksel));
     });
     panel.append(h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: addIngRow }, "+ Zutat")));
     var actions = h("div", { class: "row" },
@@ -900,7 +1145,7 @@
     var name = draft.name.trim();
     if (!name) { toast("Gib dem Gericht einen Namen."); $("recname").focus(); return; }
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
-    var ings = draft.ings.map(function (g) { return { name: g.name.trim(), store: g.store || "" }; }).filter(function (g) { return g.name; });
+    var ings = draft.ings.map(function (g) { var o = { name: g.name.trim(), store: g.store || "" }; if (g.k === "opt" || g.k === "stock") o.k = g.k; return o; }).filter(function (g) { return g.name; });
     var p;
     var mins = Math.round(Number(draft.minutes)) || 0;
     if (mins < 0 || mins > 1440) { toast("Die Dauer sollte zwischen 1 und 1440 Minuten liegen."); return; }
@@ -923,7 +1168,7 @@
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
     var empty = !st.lunch.length && !st.dinner.length && !st.outLunch && !st.outDinner;
     var p = empty ? db.doc("plan/" + ds).delete()
-      : db.doc("plan/" + ds).set({ date: ds, lunch: st.lunch, dinner: st.dinner, outLunch: st.outLunch, noteLunch: st.noteLunch, outDinner: st.outDinner, noteDinner: st.noteDinner, at: Date.now() });
+      : db.doc("plan/" + ds).set({ date: ds, lunch: st.lunch, dinner: st.dinner, outLunch: st.outLunch, noteLunch: st.noteLunch, outDinner: st.outDinner, noteDinner: st.noteDinner, listedLunch: st.listedLunch === true, listedDinner: st.listedDinner === true, at: Date.now() });
     p.catch(writeFail);
   }
   var SLOT_NAMES = { lunch: "Mittagessen", dinner: "Abendessen" };
@@ -932,7 +1177,7 @@
     var st = slotsOf(plan[ds]);
     var dishes = st[slot], out = st["out" + Cap];
     var key = ds + "|" + slot;
-    var box = h("div", { class: "slot" }, h("div", { class: "slabel" }, SLOT_NAMES[slot]));
+    var box = h("div", { class: "slot" }, h("div", { class: "slabel" }, SLOT_NAMES[slot], dishes.length && st["listed" + Cap] ? h("span", { class: "listed", title: "Zutaten sind auf den Einkaufslisten" }, " ✓ Zutaten geprüft") : null));
     var chips = h("div", { class: "mealchips" });
     if (out) {
       var note = st["note" + Cap];
@@ -965,7 +1210,7 @@
             var cur = slotsOf(plan[ds]);
             if (cur[slot].some(function (d) { return d.id === r.id; })) { renderMeal(); return; }
             cur[slot] = cur[slot].concat([{ id: r.id, name: r.name }]);
-            cur["out" + Cap] = false; cur["note" + Cap] = "";
+            cur["out" + Cap] = false; cur["note" + Cap] = ""; cur["listed" + Cap] = false;
             saveDay(ds, cur);
             renderMeal();
           } }, r.name + (picked[r.id] ? " · gewählt" : "")));
@@ -977,18 +1222,91 @@
       var inp = h("input", { type: "text", maxlength: "60", placeholder: "Wo? z. B. bei Oma (kann leer bleiben)", "aria-label": "Wo seid ihr eingeladen?" });
       var go = function () {
         var cur = slotsOf(plan[ds]);
-        cur[slot] = []; cur["out" + Cap] = true; cur["note" + Cap] = inp.value.trim();
+        cur[slot] = []; cur["out" + Cap] = true; cur["note" + Cap] = inp.value.trim(); cur["listed" + Cap] = false;
         pickDay = null; saveDay(ds, cur); renderMeal();
       };
       inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); go(); } });
       box.append(h("div", { class: "outform" }, inp,
         h("button", { class: "primary", type: "button", onclick: go }, "Speichern")));
     }
+    if (pickDay === key + "|dice") box.append(diceEl(ds, slot, key));
     var acts = h("div", { class: "slotact" });
-    var open1 = pickDay === key + "|dish", open2 = pickDay === key + "|out";
+    var open1 = pickDay === key + "|dish", open2 = pickDay === key + "|out", open3 = pickDay === key + "|dice";
     acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open1 ? null : key + "|dish"; renderMeal(); } }, open1 ? "Schließen" : "+ Gericht"));
+    acts.append(h("button", { class: "linkbtn", type: "button", "aria-label": SLOT_NAMES[slot] + " auswürfeln", onclick: function () { pickDay = open3 ? null : key + "|dice"; renderMeal(); } }, open3 ? "Würfel schließen" : "🎲 Würfeln"));
     if (!out) acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open2 ? null : key + "|out"; renderMeal(); } }, open2 ? "Schließen" : "Auswärts"));
     box.append(acts);
+    return box;
+  }
+  /* Essensplan: Würfel */
+  var DICE_TIME = [[0, "egal"], [20, "bis 20 Min"], [30, "bis 30 Min"], [45, "bis 45 Min"], [60, "bis 60 Min"]];
+  var diceState = {};
+  function diceInit(key, slot) {
+    if (!diceState[key]) {
+      var saved = {};
+      try { saved = JSON.parse(lsGet("pp-dice-" + slot) || "{}") || {}; } catch (e) {}
+      diceState[key] = { m: Number(saved.m) || 0, e: Number(saved.e) || 0, cur: null, seen: [] };
+    }
+    return diceState[key];
+  }
+  function dicePool(d, plannedWeek) {
+    var all = (recipes || []).filter(function (r) {
+      if (d.m && !(Number(r.minutes) >= 1 && Number(r.minutes) <= d.m)) return false;
+      if (d.e && !(Number(r.effort) >= 1 && Number(r.effort) <= d.e)) return false;
+      return true;
+    });
+    var fresh = all.filter(function (r) { return !plannedWeek[r.id]; });
+    return { all: all, fresh: fresh.length ? fresh : all };
+  }
+  function diceRoll(ds, slot, key) {
+    var d = diceInit(key, slot);
+    var week = {};
+    var mon = weekStart(dn(ds));
+    for (var i = 0; i < 7; i++) allDishes(plan[dnToStr(mon + i)]).forEach(function (x) { week[x.id] = true; });
+    var pool = dicePool(d, week).fresh;
+    if (!pool.length) { d.cur = null; return; }
+    var cand = pool.filter(function (r) { return d.seen.indexOf(r.id) < 0; });
+    if (!cand.length) { d.seen = d.cur ? [d.cur] : []; cand = pool.filter(function (r) { return d.seen.indexOf(r.id) < 0; }); if (!cand.length) cand = pool; }
+    var pick = cand[Math.floor(Math.random() * cand.length)];
+    d.cur = pick.id; d.seen.push(pick.id);
+  }
+  function diceEl(ds, slot, key) {
+    var Cap = slot === "lunch" ? "Lunch" : "Dinner";
+    var d = diceInit(key, slot);
+    var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ m: d.m, e: d.e })); d.cur = null; d.seen = []; renderMeal(); };
+    var tSel = h("select", { "aria-label": "Wie schnell soll es gehen?", onchange: function (e) { d.m = Number(e.target.value); save(); } });
+    DICE_TIME.forEach(function (t) { tSel.append(h("option", { value: String(t[0]), selected: t[0] === d.m }, t[1])); });
+    var eSel = h("select", { "aria-label": "Wie viel Aufwand höchstens?", onchange: function (e) { d.e = Number(e.target.value); save(); } },
+      h("option", { value: "0", selected: d.e === 0 }, "egal"));
+    for (var i = 1; i <= 4; i++) eSel.append(h("option", { value: String(i), selected: d.e === i }, "höchstens " + i + " · " + EFFORT_NAMES[i]));
+    var week = {};
+    var mon = weekStart(dn(ds));
+    for (var j = 0; j < 7; j++) allDishes(plan[dnToStr(mon + j)]).forEach(function (x) { week[x.id] = true; });
+    var info = dicePool(d, week), cur = (recipes || []).filter(function (r) { return r.id === d.cur; })[0];
+    var unknown = (d.m || d.e) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
+    var box = h("div", { class: "dice" },
+      h("div", { class: "two" }, h("label", { class: "fl" }, "Wie schnell?", tSel), h("label", { class: "fl" }, "Wie viel Aufwand?", eSel)));
+    if (!info.all.length) {
+      box.append(h("p", { class: "noneyet" }, (d.m || d.e) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand und Dauer oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
+    } else {
+      if (cur) {
+        var taken = slotsOf(plan[ds])[slot].some(function (x) { return x.id === cur.id; });
+        box.append(h("div", { class: "dicecard" },
+          h("div", { class: "dname" }, cur.name),
+          (effortText(cur.effort) || minutesText(cur.minutes)) ? h("div", { class: "dmeta" },
+            minutesText(cur.minutes) ? h("span", null, "⏱ " + minutesText(cur.minutes)) : null,
+            effortText(cur.effort) ? h("span", null, "Aufwand " + effortText(cur.effort)) : null) : null,
+          h("p", { class: "dings" }, ingLine(cur) || "Keine Zutaten eingetragen.")));
+      }
+      box.append(h("div", { class: "row" },
+        cur && !taken ? h("button", { class: "primary", type: "button", onclick: function () {
+          var c2 = slotsOf(plan[ds]);
+          c2[slot] = c2[slot].concat([{ id: cur.id, name: cur.name }]); c2["out" + Cap] = false; c2["note" + Cap] = ""; c2["listed" + Cap] = false;
+          pickDay = null; saveDay(ds, c2); renderMeal();
+        } }, "Nehmen") : null,
+        h("button", { class: cur ? "linkbtn" : "primary", type: "button", onclick: function () { diceRoll(ds, slot, key); renderMeal(); } }, cur ? "🎲 Nochmal würfeln" : "🎲 Würfeln")));
+      box.append(h("p", { class: "foot" }, info.all.length + (info.all.length === 1 ? " Gericht passt" : " Gerichte passen") + (info.fresh.length < info.all.length ? "" : "") + "." + (unknown ? " " + unknown + " ohne Angaben zu Aufwand und Dauer werden bei einem Filter nicht vorgeschlagen." : "")));
+    }
     return box;
   }
   function dayEl(n, ds, today) {
@@ -1004,7 +1322,7 @@
     $("weeklabel").textContent = (weekOffset === 0 ? "Diese Woche · " : "") + dayLabel(mon) + " – " + dayLabel(mon + 6);
     $("weektoday").hidden = weekOffset === 0;
     if (!planLoaded || recipes === null) { $("mealhead").textContent = "Essensplan wird geladen …"; $("mealshop").hidden = true; return; }
-    var total = 0, outN = 0, ids = {};
+    var total = 0, outN = 0, ids = {}, pendSlots = [], allSlots = [], pendIds = {};
     for (var i = 0; i < 7; i++) {
       var n = mon + i, ds = dnToStr(n);
       var st = slotsOf(plan[ds]);
@@ -1012,15 +1330,26 @@
       total += dishes.length;
       outN += (st.outLunch ? 1 : 0) + (st.outDinner ? 1 : 0);
       dishes.forEach(function (d) { ids[d.id] = true; });
+      if (n >= today) [["lunch", "Lunch"], ["dinner", "Dinner"]].forEach(function (sp) {
+        if (!st[sp[0]].length) return;
+        allSlots.push({ ds: ds, slot: sp[0] });
+        if (!st["listed" + sp[1]]) { pendSlots.push({ ds: ds, slot: sp[0] }); st[sp[0]].forEach(function (d) { pendIds[d.id] = true; }); }
+      });
       box.append(dayEl(n, ds, today));
     }
     var txt = total === 0 ? "Noch nichts geplant" : total === 1 ? "1 Gericht geplant" : total + " Gerichte geplant";
     if (outN) txt += " · " + outN + "× auswärts";
     if (total === 0 && outN) txt = outN + "× auswärts, sonst noch nichts geplant";
     $("mealhead").textContent = txt;
-    mealIds = Object.keys(ids).filter(function (id) { return recipes.some(function (r) { return r.id === id; }); });
+    var known = function (id) { return recipes.some(function (r) { return r.id === id; }); };
+    mealIds = Object.keys(pendIds).filter(known);
+    mealCtx = { slots: pendSlots, all: allSlots, allIds: Object.keys(ids).filter(known) };
+    var nPend = pendSlots.reduce(function (a, sp) { return a + slotsOf(plan[sp.ds])[sp.slot].length; }, 0);
     $("mealshop").hidden = !mealIds.length;
-    $("mealshop").textContent = mealIds.length === 1 ? "Zutaten für 1 Gericht einkaufen" : "Zutaten für " + mealIds.length + " Gerichte einkaufen";
+    $("mealshop").textContent = "Woche festlegen und Zutaten prüfen (" + nPend + (nPend === 1 ? " Gericht" : " Gerichte") + ")";
+    var done = !mealIds.length && allSlots.length > 0;
+    $("mealshopnote").hidden = !done;
+    $("mealshopagain").hidden = !done;
   }
 
   /* ---------- Kalender ---------- */
@@ -1381,6 +1710,110 @@
     $("evstart").disabled = all; $("evfinish").disabled = all;
   }
 
+  /* ---------- Startseite „Heute“ ---------- */
+  function goSection(name, after) {
+    section = name; lsSet("pp-section", name);
+    syncControls();
+    if (name === "putz") render();
+    else if (name === "shop") renderShop();
+    else if (name === "meal") renderMeal();
+    else if (name === "cal") renderCal();
+    else if (name === "spend") renderSpend();
+    else if (name === "cook") renderCook();
+    if (after) after();
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+  function homeCard(title, target, body, linkText) {
+    var card = h("section", { class: "panel hcard" },
+      h("div", { class: "hhead" }, h("h2", null, title),
+        h("button", { class: "linkbtn", type: "button", onclick: function () { goSection(target); } }, linkText || "Öffnen")));
+    body.forEach(function (b) { if (b) card.append(b); });
+    return card;
+  }
+  function renderHome() {
+    var box = $("homemain");
+    box.replaceChildren();
+    var hr = new Date().getHours();
+    $("homehead").textContent = (hr < 11 ? "Guten Morgen" : hr < 18 ? "Hallo" : "Guten Abend") + (me ? ", " + me : "") + "!";
+    if (dbMissing) { box.append(h("div", { class: "banner" }, h("p", null, connText()))); return; }
+    var today = dn(todayStr()), ts = todayStr();
+
+    /* Termine */
+    if (eventsLoaded) {
+      var evs = eventsOn(ts);
+      var body = [];
+      if (evs.length) { var l = h("div", { class: "evlist" }); evs.forEach(function (e) { l.append(evRow(e)); }); body.push(l); }
+      else body.push(h("p", { class: "noneyet" }, "Heute keine Termine."));
+      var soon = [];
+      for (var i = 1; i <= 7 && soon.length < 3; i++) eventsOn(dnToStr(today + i)).forEach(function (e) { if (soon.length < 3 && !(String(e.date) < dnToStr(today + i))) soon.push({ n: today + i, e: e }); });
+      if (soon.length) {
+        var ul = h("ul", { class: "soon" });
+        soon.forEach(function (x) { ul.append(h("li", null, h("span", { class: "dot " + evWho(x.e) }), h("span", { class: "sd" }, WD[(x.n + 3) % 7] + " " + dayLabel(x.n)), h("span", null, x.e.title || "Termin"))); });
+        body.push(h("p", { class: "slabel" }, "In den nächsten Tagen"), ul);
+      }
+      box.append(homeCard("Termine", "cal", body, "Kalender"));
+    }
+
+    /* Putzplan */
+    if (tasks !== null) {
+      var due = tasks.map(function (t) { var i = info(t); return { t: t, d: i.d, who: i.who, demand: i.demand }; })
+        .filter(function (x) { return !x.demand && x.d <= 0; })
+        .sort(function (a, b) { return a.d - b.d || String(a.t.name).localeCompare(String(b.t.name), "de"); });
+      var tb = [];
+      if (!due.length) tb.push(h("p", { class: "noneyet" }, "Heute ist nichts fällig. 🎉"));
+      else {
+        var tl = h("ul", { class: "soon tasks" });
+        due.slice(0, 5).forEach(function (x) {
+          tl.append(h("li", null, h("span", { class: "chip " + x.who }, x.who === "egal" ? "F·C" : x.who),
+            h("span", { class: "tn" }, x.t.name), h("span", { class: "td " + (x.d < 0 ? "late" : "today") }, x.d < 0 ? "überfällig" : "heute")));
+        });
+        tb.push(tl);
+        if (due.length > 5) tb.push(h("p", { class: "foot" }, "und " + (due.length - 5) + " weitere"));
+      }
+      box.append(homeCard("Putzplan", "putz", tb));
+    }
+
+    /* Essen */
+    if (planLoaded && recipes !== null) {
+      var st = slotsOf(plan[ts]);
+      var line = function (name, dishes, out, note) {
+        var txt = out ? "Auswärts" + (note ? ": " + note : "") : dishes.length ? dishes.map(function (d) { var r = recipes.filter(function (x) { return x.id === d.id; })[0]; return r ? r.name : d.name; }).join(", ") : "noch nichts geplant";
+        return h("div", { class: "mline" }, h("span", { class: "slabel" }, name), h("span", { class: dishes.length || out ? "mt" : "mt none" }, txt));
+      };
+      box.append(homeCard("Essen heute", "meal", [line("Mittagessen", st.lunch, st.outLunch, st.noteLunch), line("Abendessen", st.dinner, st.outDinner, st.noteDinner)], "Essensplan"));
+    }
+
+    /* Einkauf */
+    if (stores !== null) {
+      var sb = [];
+      var withItems = sortedStores().map(function (s) { return { s: s, n: shopCount(s.id) }; }).filter(function (x) { return x.n > 0; });
+      if (!withItems.length) sb.push(h("p", { class: "noneyet" }, "Nichts auf den Einkaufslisten."));
+      else {
+        var row = h("div", { class: "bought" });
+        withItems.forEach(function (x) { row.append(h("button", { class: "store", type: "button", onclick: function () { curStore = x.s.id; lsSet("pp-store", x.s.id); goSection("shop"); } }, x.s.name, h("span", { class: "cnt" }, String(x.n)))); });
+        sb.push(row);
+      }
+      box.append(homeCard("Einkauf", "shop", sb));
+    }
+
+    /* Budget */
+    if (budgets !== null && budgets.length) {
+      var b = resolveBudget();
+      if (b) {
+        var spent = spends.filter(function (x) { return x.budget === b.id; }).reduce(function (a, x) { return a + (x.amount || 0); }, 0);
+        var left = b.amount - spent, over = left < 0;
+        var ds0 = dn(b.start), de0 = dn(b.end), tot = de0 - ds0 + 1;
+        var dl = today > de0 ? 0 : de0 - Math.max(today, ds0) + 1;
+        var fill = Math.min(100, spent / b.amount * 100);
+        box.append(homeCard("Budget", "spend", [
+          h("div", { class: "budgetline" }, h("span", { class: "num" + (over ? " over" : "") }, (over ? "−" : "") + eur(Math.abs(left))), h("span", { class: "lbl" }, over ? " drüber" : " übrig")),
+          h("div", { class: "pwrap" }, h("div", { class: "pbar" + (over ? " over" : ""), role: "img", "aria-label": pct(spent / b.amount * 100) + " ausgegeben" }, h("span", { style: "width:" + fill + "%" }))),
+          h("p", { class: "foot" }, (b.name ? b.name + " · " : "") + (today > de0 ? "Zeitraum beendet" : "noch " + dl + (dl === 1 ? " Tag" : " Tage")) + (!over && dl > 0 ? " · " + eur(Math.floor(left / dl)) + " pro Tag" : ""))
+        ]));
+      }
+    }
+  }
+
   /* Ausgaben */
   var DEFAULT_CATS = ["Lebensmittel", "Drogerie", "Haushalt", "Restaurant", "Freizeit", "Mobilität", "Gesundheit", "Kleidung", "Sonstiges"];
   function parseEuro(s) {
@@ -1669,10 +2102,12 @@
     $("mealview").hidden = section !== "meal";
     $("spendview").hidden = section !== "spend";
     $("calview").hidden = section !== "cal";
-    [["putz", "tabputz"], ["shop", "tabshop"], ["cook", "tabcook"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"]].forEach(function (p) {
+    $("homeview").hidden = section !== "home";
+    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["cook", "tabcook"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"]].forEach(function (p) {
       var b = $(p[1]);
       if (section === p[0]) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
+    if (section === "home") { try { renderHome(); } catch (e) {} }
   }
 
   /* Start */
@@ -1687,6 +2122,7 @@
   $("newint").addEventListener("change", syncNewInt);
   syncNewInt();
 
+  $("tabhome").addEventListener("click", function () { goSection("home"); });
   $("tabputz").addEventListener("click", function () { section = "putz"; lsSet("pp-section", "putz"); syncControls(); });
   $("tabshop").addEventListener("click", function () { section = "shop"; lsSet("pp-section", "shop"); syncControls(); });
   $("tabcook").addEventListener("click", function () { section = "cook"; lsSet("pp-section", "cook"); syncControls(); });
@@ -1786,14 +2222,17 @@
   $("weekprev").addEventListener("click", function () { weekOffset--; pickDay = null; renderMeal(); });
   $("weeknext").addEventListener("click", function () { weekOffset++; pickDay = null; renderMeal(); });
   $("weektoday").addEventListener("click", function () { weekOffset = 0; pickDay = null; renderMeal(); });
-  $("mealshop").addEventListener("click", function () {
-    if (!mealIds.length) return;
+  function startMealPantry(ids, slots) {
+    if (!ids.length) return;
     picked = {};
-    mealIds.forEach(function (id) { picked[id] = true; });
+    ids.forEach(function (id) { picked[id] = true; });
+    pantryCtx = { slots: slots };
     section = "cook"; lsSet("pp-section", "cook");
     syncControls();
     openPantry();
-  });
+  }
+  $("mealshop").addEventListener("click", function () { startMealPantry(mealIds, mealCtx.slots); });
+  $("mealshopagain").addEventListener("click", function () { startMealPantry(mealCtx.allIds, mealCtx.all); });
   $("cookseg").addEventListener("click", function (e) {
     var v = e.target.getAttribute && e.target.getAttribute("data-v");
     if (!v) return;
@@ -1876,6 +2315,7 @@
   function listen(coll, apply) {
     db.collection(coll).onSnapshot(function (snap) {
       apply(snap.docs.map(function (d) { return Object.assign({}, d.data(), { id: d.id }); }));
+      if (section === "home") renderHome();
     }, function (e) { readFail(e); apply([]); });
   }
   function startData(store) {

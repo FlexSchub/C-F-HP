@@ -405,3 +405,55 @@ label.chk input { width: 22px; height: 22px; min-height: 0; margin-top: 2px; fle
 .icsin { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px; }
 .icsin h3 { margin: 6px 0 0; font-size: 1rem; }
 .icssample { margin: 0 0 8px; padding-left: 1.2rem; color: var(--muted); font-size: 0.9rem; }
+
+/* Einkauf: Menge, Gang, Bearbeiten */
+.items .nmbtn { background: none; border: 0; padding: 10px 0; text-align: left; font: inherit; font-size: 1.05rem; color: var(--ink); cursor: pointer; overflow-wrap: anywhere; min-height: 44px; }
+.items .qty { color: var(--accent); font-variant-numeric: tabular-nums; }
+.items li.editrow { align-items: start; padding-top: 10px; padding-bottom: 10px; }
+.itemedit { display: flex; flex-direction: column; gap: 8px; grid-column: 2 / -1; min-width: 0; }
+.itemedit .qn { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 8px; }
+.itemedit input, .itemedit select { background: var(--bg); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 12px; min-height: 44px; font-size: 1rem; min-width: 0; width: 100%; }
+
+/* Essensplan: Würfel */
+.dice { display: flex; flex-direction: column; gap: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.dicecard { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.dicecard .dname { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; overflow-wrap: anywhere; }
+.listed { color: var(--accent); font-weight: 600; text-transform: none; letter-spacing: 0; }
+
+/* Startseite */
+.hcard { display: flex; flex-direction: column; gap: 10px; }
+.hhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.hhead h2 { margin: 0; }
+.soon { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.soon li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.soon .sd { color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.soon .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.soon .dot.F { background: var(--f); } .soon .dot.C { background: var(--c); } .soon .dot.B { background: var(--g); }
+.soon.tasks .chip { margin-top: 0; flex: 0 0 auto; width: auto; min-width: 30px; padding: 0 6px; border-radius: 15px; font-size: 0.8rem; }
+.soon.tasks .chip.egal { background: var(--line); color: var(--ink); }
+.soon .tn { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.soon .td { font-size: 0.85rem; flex: 0 0 auto; }
+.soon .td.late { color: var(--bad); font-weight: 600; } .soon .td.today { color: var(--warn); font-weight: 600; }
+.mline { display: flex; flex-direction: column; gap: 2px; }
+.mline .mt.none { color: var(--muted); }
+.budgetline { display: flex; align-items: baseline; gap: 6px; }
+.budgetline .num { font-family: var(--font-display); font-weight: 700; font-size: 1.8rem; font-variant-numeric: tabular-nums; }
+.budgetline .num.over { color: var(--bad); }
+.budgetline .lbl { color: var(--muted); }
+
+/* Artikel bei mehreren Läden */
+.also { color: var(--muted); font-size: .85rem; }
+.alsorow { align-items: center; margin: -4px 0 8px; }
+.alsobox { display: flex; flex-direction: column; gap: 6px; }
+.alsorow .hint, .alsobox .hint { font-size: .85rem; color: var(--muted); }
+.alsorow .bchip::before, .alsobox .bchip::before { content: ""; }
+.alsorow .bchip.sel::before, .alsobox .bchip.sel::before { content: "✓"; }
+.alsorow .bchip, .alsobox .bchip { min-height: 40px; padding: 6px 12px; }
+.alsorow .bchip.sel, .alsobox .bchip.sel { background: var(--g-soft, transparent); }
+
+/* Zutat: Art (normal, optional, Vorrat) */
+.ingwrap { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; }
+.ingwrap .kindsel { align-self: flex-start; max-width: 100%; background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-height: 36px; font-size: 0.88rem; }
+.xchips .bchip::before { content: "+"; }
+.xchips .bchip.sel::before { content: "✓"; }
+.xchips .bchip.sel { background: var(--g-soft, transparent); }
