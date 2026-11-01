@@ -485,3 +485,19 @@ label.chk input { width: 22px; height: 22px; min-height: 0; margin-top: 2px; fle
 .followrow { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line); }
 .followrow .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 #newfollowwrap { grid-column: 1 / -1; }
+
+/* Dropdown für verknüpfte Aufgaben */
+.dd { border: 1px solid var(--line-strong); border-radius: 10px; background: var(--bg); }
+.dd summary { cursor: pointer; padding: 10px 12px; min-height: 44px; display: flex; align-items: center; gap: 4px; color: var(--ink); list-style: none; }
+.dd summary::-webkit-details-marker { display: none; }
+.dd summary::after { content: "▾"; margin-left: auto; color: var(--muted); }
+.dd[open] summary::after { content: "▴"; }
+.dd .ddcount { color: var(--muted); }
+.ddlist { display: flex; flex-direction: column; gap: 2px; padding: 4px 12px 10px; max-height: 14rem; overflow-y: auto; border-top: 1px solid var(--line); }
+.ddlist label.chk { min-height: 40px; }
+details.add .dd summary { justify-content: flex-start; padding: 10px 12px; font-weight: 400; min-height: 44px; flex-wrap: wrap; }
+details.add .dd summary::after, details.add .dd[open] summary::after { font-size: 1rem; color: var(--muted); }
+details.add .dd summary::after { content: "▾"; margin-left: auto; }
+details.add .dd[open] summary::after { content: "▴"; }
+.ddlist label.chk, .editbox .ddlist label.chk, form.add .ddlist label.chk { display: flex; flex-direction: row; align-items: center; gap: 10px; font-size: 0.95rem; color: var(--ink); }
+.ddlist input[type=checkbox], .editbox .ddlist input[type=checkbox], form.add .ddlist input[type=checkbox] { width: 22px; height: 22px; min-height: 0; padding: 0; margin: 0; flex: 0 0 22px; }

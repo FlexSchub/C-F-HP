@@ -239,15 +239,25 @@
       });
     }).catch(writeFail);
   }
-  function followChips(sel, exceptId, onToggle) {
-    var wrap = h("div", { class: "bought xchips" });
-    (tasks || []).filter(function (x) { return x.id !== exceptId; }).slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "de"); }).forEach(function (x) {
-      var b = h("button", { class: "bchip" + (sel[x.id] ? " sel" : ""), type: "button", "aria-pressed": String(!!sel[x.id]), onclick: function () {
-        sel[x.id] = !sel[x.id]; b.classList.toggle("sel", !!sel[x.id]); b.setAttribute("aria-pressed", String(!!sel[x.id]));
-      } }, x.name);
-      wrap.append(b);
+  var ddOpen = {};
+  /* Ausklappbare Auswahl (Dropdown) mit Häkchen für verknüpfte Aufgaben */
+  function followChips(sel, exceptId) {
+    var key = exceptId || "new";
+    var others = (tasks || []).filter(function (x) { return x.id !== exceptId; }).slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "de"); });
+    var count = function () { return Object.keys(sel).filter(function (k) { return sel[k] && others.some(function (o) { return o.id === k; }); }).length; };
+    var label = h("span", { class: "ddcount" });
+    var upd = function () { var n = count(); label.textContent = n === 0 ? "keine ausgewählt" : n === 1 ? "1 Aufgabe" : n + " Aufgaben"; };
+    var dd = h("details", { class: "dd" }, h("summary", null, "Aufgaben auswählen · ", label));
+    dd.open = !!ddOpen[key];
+    dd.addEventListener("toggle", function () { ddOpen[key] = dd.open; });
+    var box = h("div", { class: "ddlist" });
+    others.forEach(function (x) {
+      var cb = h("input", { type: "checkbox", checked: !!sel[x.id], onchange: function (e) { sel[x.id] = e.target.checked; upd(); } });
+      box.append(h("label", { class: "chk" }, cb, " " + x.name));
     });
-    return wrap;
+    dd.append(box);
+    upd();
+    return dd;
   }
   function renderNewFollow() {
     var box = $("newfollow");
@@ -427,9 +437,9 @@
     }
     var groups = [
       ["Heute und überfällig", function (d) { return d <= 0; }],
+      ["Nach Bedarf", function (d) { return d >= DEMAND; }],
       ["Diese Woche", function (d) { return d >= 1 && d <= 7; }],
-      ["Später", function (d) { return d > 7 && d < DEMAND; }],
-      ["Nach Bedarf", function (d) { return d >= DEMAND; }]
+      ["Später", function (d) { return d > 7 && d < DEMAND; }]
     ];
     groups.forEach(function (g) {
       var items = shown.filter(function (x) { return g[1](x.d); });
