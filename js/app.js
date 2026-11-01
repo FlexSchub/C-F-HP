@@ -18,6 +18,8 @@
   var open = {};
   var editing = {};
   var confirmDel = null;
+  var togetherAsk = null;
+  var cookTimeF = {};
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -178,9 +180,10 @@
   }
 
   /* Aktionen */
-  function markDone(t) {
+  function markDone(t, both) {
+    togetherAsk = null;
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
-    if (!me) {
+    if (!me && !both) {
       toast("Wähle oben zuerst, ob du F oder C bist.");
       var seg = $("me");
       seg.classList.remove("nudge"); void seg.offsetWidth; seg.classList.add("nudge");
@@ -194,7 +197,13 @@
       countF: t.countF || 0,
       countC: t.countC || 0
     };
-    var next = {
+    var next = both ? {
+      lastDone: todayStr(),
+      lastBy: "F & C",
+      countF: prev.countF + 1,
+      countC: prev.countC + 1,
+      turn: t.assignee === "abwechselnd" ? (t.turn === "C" ? "C" : "F") : ""
+    } : {
       lastDone: todayStr(),
       lastBy: me,
       countF: prev.countF + (me === "F" ? 1 : 0),
@@ -203,12 +212,17 @@
     };
     var demand = isDemand(t);
     var ref = db.doc("tasks/" + t.id);
-    var lref = db.collection("log").doc();
-    var entry = { taskId: t.id, task: t.name, room: t.room || "Überall", by: me, date: todayStr(), at: Date.now(), points: pointsOf(t) };
-    Promise.all([ref.update(next), lref.set(entry)]).then(function () {
+    var whoList = both ? ["F", "C"] : [me];
+    var lrefs = whoList.map(function () { return db.collection("log").doc(); });
+    var entries = whoList.map(function (w) {
+      var en = { taskId: t.id, task: t.name, room: t.room || "Überall", by: w, date: todayStr(), at: Date.now(), points: pointsOf(t) };
+      if (both) en.together = true;
+      return en;
+    });
+    Promise.all([ref.update(next)].concat(lrefs.map(function (lr, i) { return lr.set(entries[i]); }))).then(function () {
       var days = Number(t.intervalDays) || 7;
-      toast("„" + t.name + "“ erledigt." + (demand ? "" : " Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + "."), "Rückgängig", function () {
-        Promise.all([ref.update(prev), lref.delete()]).catch(writeFail);
+      toast("„" + t.name + "“ erledigt" + (both ? " (zusammen, beide bekommen " + pointsOf(t) + (pointsOf(t) === 1 ? " Punkt" : " Punkte") + ")." : ".") + (demand ? "" : " Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + "."), "Rückgängig", function () {
+        Promise.all([ref.update(prev)].concat(lrefs.map(function (lr) { return lr.delete(); }))).catch(writeFail);
       });
     }).catch(writeFail);
   }
@@ -233,8 +247,11 @@
     if (t.assignee === "abwechselnd") metaParts.push("abwechselnd");
     if (t.assignee === "egal") metaParts.push("egal wer");
     if (pointsOf(t) > 1) metaParts.push(pointsOf(t) + " Punkte");
+    if (t.together === true) metaParts.push("auch zusammen");
     var li = h("li", { class: "task" });
-    var check = h("button", { class: "check", type: "button", "aria-label": "Erledigt: " + t.name, onclick: function () { markDone(t); } });
+    var check = h("button", { class: "check", type: "button", "aria-label": "Erledigt: " + t.name, onclick: function () {
+      if (t.together === true) { togetherAsk = togetherAsk === t.id ? null : t.id; render(); } else markDone(t);
+    } });
     check.innerHTML = CHECK;
     var title = h("button", { class: "title", type: "button", "aria-expanded": isOpen ? "true" : "false", onclick: function () {
       if (open[t.id]) delete open[t.id]; else open[t.id] = true;
@@ -245,6 +262,15 @@
       h("div", { class: "body" }, title, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", { class: "due " + status }, inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
       h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who)
     );
+    if (togetherAsk === t.id) {
+      var pp = pointsOf(t);
+      li.append(h("div", { class: "togetherask" },
+        h("span", { class: "hint" }, "Wer hat es gemacht?"),
+        h("div", { class: "row" },
+          h("button", { class: "primary", type: "button", onclick: function () { markDone(t, false); } }, me ? "Nur ich (" + me + ")" : "Nur ich"),
+          h("button", { class: "primary alt", type: "button", onclick: function () { markDone(t, true); } }, "Zusammen (beide " + pp + (pp === 1 ? " Punkt" : " Punkte") + ")"),
+          h("button", { class: "linkbtn", type: "button", onclick: function () { togetherAsk = null; render(); } }, "Abbrechen"))));
+    }
     if (isOpen) {
       var last = t.lastDone ? "Zuletzt erledigt von " + (t.lastBy || "?") + " am " + fmt(t.lastDone) + "." : "Noch nie erledigt.";
       var actions = h("div", { class: "row" });
@@ -255,7 +281,7 @@
         );
       } else {
         actions.append(
-          h("button", { class: "linkbtn", type: "button", onclick: function () { editing[t.id] = !editing[t.id]; render(); } }, editing[t.id] ? "Ändern schließen" : "Rhythmus ändern"),
+          h("button", { class: "linkbtn", type: "button", onclick: function () { editing[t.id] = !editing[t.id]; render(); } }, editing[t.id] ? "Ändern schließen" : "Name und Rhythmus ändern"),
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = t.id; render(); } }, "Aufgabe löschen"));
       }
       li.append(h("div", { class: "more" }, h("div", null, last), editing[t.id] ? editForm(t) : null, actions));
@@ -280,6 +306,8 @@
       h("option", { value: "abwechselnd" }, "Abwechselnd"), h("option", { value: "egal" }, "Egal wer"));
     who.value = t.assignee || "F";
     var pts = h("input", { type: "number", min: "1", max: "10", step: "1", inputmode: "numeric", "aria-label": "Punkte", value: String(pointsOf(t)) });
+    var nm = h("input", { type: "text", maxlength: "80", "aria-label": "Name der Aufgabe", value: t.name || "", required: true });
+    var tog = h("input", { type: "checkbox", checked: t.together === true });
     var err = h("p", { class: "autherr", role: "alert" });
     function sync() { cust.hidden = sel.value !== "custom"; n.disabled = sel.value !== "custom"; }
     sel.addEventListener("change", sync); sync();
@@ -289,12 +317,16 @@
       if (days === null) { err.textContent = "Bitte eine Zahl von 1 bis 999 eingeben (höchstens 10 Jahre)."; return; }
       var pv = readPoints(pts);
       if (pv === null) { err.textContent = "Punkte: bitte eine ganze Zahl von 1 bis 10."; return; }
-      var upd = { intervalDays: days, assignee: who.value, points: pv };
+      var newName = nm.value.trim();
+      if (!newName) { err.textContent = "Die Aufgabe braucht einen Namen."; return; }
+      var upd = { name: newName, intervalDays: days, assignee: who.value, points: pv, together: tog.checked };
       if (who.value === "abwechselnd") upd.turn = t.turn === "C" ? "C" : "F"; else upd.turn = "";
       db.doc("tasks/" + t.id).update(upd).then(function () { editing[t.id] = false; toast("Gespeichert."); }).catch(writeFail);
     } },
+      h("label", null, "Name", nm),
       h("label", null, "Wie oft?", sel), cust,
-      h("label", null, "Zuständig", who), h("label", null, "Punkte (wie anstrengend ist die Aufgabe?)", pts), err,
+      h("label", null, "Zuständig", who), h("label", null, "Punkte (wie anstrengend ist die Aufgabe?)", pts),
+      h("label", { class: "chk" }, tog, " Kann auch zusammen erledigt werden (beide bekommen die Punkte)"), err,
       h("button", { class: "primary", type: "submit" }, "Speichern"));
   }
 
@@ -464,7 +496,7 @@
     var ul = h("ul", { class: "recent" });
     recent.forEach(function (l) {
       var who = l.by === "C" ? "C" : "F";
-      ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, (l.task || "Aufgabe") + (pointsOf(l) > 1 ? " · " + pointsOf(l) + " P." : "")), h("span", { class: "rd" }, fmt(l.date))));
+      ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, (l.task || "Aufgabe") + (pointsOf(l) > 1 ? " · " + pointsOf(l) + " P." : "") + (l.together ? " · zusammen" : "")), h("span", { class: "rd" }, fmt(l.date))));
     });
     box.append(h("div", { class: "panel" }, h("h2", null, "Zuletzt erledigt"), ul));
     box.append(h("p", { class: "foot" }, "Gezählt wird ab dem ersten Abhaken in dieser Version."));
@@ -831,6 +863,30 @@
   }
   function effortText(n) { n = Math.round(Number(n)); if (!(n >= 1 && n <= 5)) return ""; return "●".repeat(n) + "○".repeat(5 - n); }
   var EFFORT_NAMES = ["", "sehr leicht", "leicht", "mittel", "aufwendig", "sehr aufwendig"];
+  var TIME_CATS = [
+    { label: "unter 15 Min", short: "< 15 Min", rep: 10, max: 14 },
+    { label: "15 bis 30 Min", short: "15–30 Min", rep: 25, max: 30 },
+    { label: "30 bis 60 Min", short: "30–60 Min", rep: 45, max: 60 },
+    { label: "60 bis 90 Min", short: "60–90 Min", rep: 75, max: 90 },
+    { label: "über 90 Min", short: "90+ Min", rep: 120, max: 99999 }
+  ];
+  /* Gibt 0 für "keine Angabe" zurück, sonst 1 bis 5 */
+  function timeCat(m) {
+    m = Math.round(Number(m));
+    if (!(m >= 1)) return 0;
+    for (var i = 0; i < TIME_CATS.length; i++) if (m <= TIME_CATS[i].max) return i + 1;
+    return TIME_CATS.length;
+  }
+  /* Zeit-Skala 1 bis 5 mit kleinen Uhren, wie beim Aufwand */
+  function clockEl(m) {
+    var c = timeCat(m);
+    if (!c) return null;
+    var scale = h("span", { class: "clocks", "aria-hidden": "true" });
+    for (var i = 1; i <= TIME_CATS.length; i++) scale.append(h("span", { class: i <= c ? "on" : "off" }, "🕐"));
+    return h("div", { class: "dclock", role: "img", "aria-label": "Zeit " + c + " von 5, " + TIME_CATS[c - 1].label, title: TIME_CATS[c - 1].label },
+      h("span", { class: "zl" }, "Zeit"), scale);
+  }
+  function timeLabel(m) { var c = timeCat(m); return c ? TIME_CATS[c - 1].short : ""; }
   function minutesText(m) { m = Math.round(Number(m)); if (!(m >= 1)) return ""; return m >= 60 ? Math.floor(m / 60) + " Std" + (m % 60 ? " " + (m % 60) + " Min" : "") : m + " Min"; }
   var KIND_NAMES = { "": "Zutat", opt: "Optional (Topping, Extra)", stock: "Immer da (Gewürz, Vorrat)" };
   function kindOf(g) { return g && (g.k === "opt" || g.k === "stock") ? g.k : ""; }
@@ -852,9 +908,9 @@
     return h("li", { class: "dish" + (on ? " on" : "") }, pick,
       h("div", { class: "dbody" },
         h("div", { class: "dishhead" }, h("span", { class: "dname" }, r.name), h("span", { class: "lead" }), h("span", { class: "dcount" }, ings.length + (ings.length === 1 ? " Zutat" : " Zutaten") + (nExtra ? " + " + nExtra + " Extra" + (nExtra === 1 ? "" : "s") : ""))),
-        (effortText(r.effort) || minutesText(r.minutes)) ? h("div", { class: "dmeta" },
-          minutesText(r.minutes) ? h("span", { title: "Ungefähre Dauer" }, "⏱ " + minutesText(r.minutes)) : null,
+        (effortText(r.effort)) ? h("div", { class: "dmeta" },
           effortText(r.effort) ? h("span", { title: "Aufwand: " + EFFORT_NAMES[Math.round(Number(r.effort))], "aria-label": "Aufwand " + Math.round(Number(r.effort)) + " von 5, " + EFFORT_NAMES[Math.round(Number(r.effort))] }, "Aufwand " + effortText(r.effort)) : null) : null,
+        clockEl(r.minutes),
         h("p", { class: "dings" }, names || "Noch keine Zutaten eingetragen."),
         h("button", { class: "linkbtn dedit", type: "button", onclick: function () { openEditor(r); } }, "Bearbeiten")));
   }
@@ -955,8 +1011,20 @@
     if (!recipes.length) {
       box.append(h("div", { class: "empty" }, h("b", null, "Eure Speisekarte ist noch leer"), h("span", null, "Tippe oben auf „+ Gericht“ und trag ein Gericht mit seinen Zutaten ein. Jede Zutat bekommt den Laden, in dem ihr sie kauft.")));
     } else {
+      var anyTime = recipes.some(function (r) { return timeCat(r.minutes) > 0; });
+      var tf = Object.keys(cookTimeF).filter(function (k) { return cookTimeF[k]; }).map(Number);
+      if (anyTime) {
+        var fr = h("div", { class: "bought xchips timefilter" }, h("span", { class: "hint" }, "Zeit:"));
+        TIME_CATS.forEach(function (tc, i) {
+          var on = !!cookTimeF[i + 1];
+          fr.append(h("button", { class: "bchip" + (on ? " sel" : ""), type: "button", "aria-pressed": String(on), onclick: function () { cookTimeF[i + 1] = !on; renderCook(); } }, tc.short));
+        });
+        box.append(fr);
+      }
+      var list = recipes.filter(function (r) { return !tf.length || tf.indexOf(timeCat(r.minutes)) >= 0; });
+      if (!list.length) box.append(h("div", { class: "empty" }, h("b", null, "Kein Gericht in dieser Zeit"), h("span", null, "Wähle eine andere Zeit oder tippe die Auswahl wieder ab.")));
       var ul = h("ul", { class: "dishes" });
-      recipes.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "de"); }).forEach(function (r) { ul.append(dishEl(r)); });
+      list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "de"); }).forEach(function (r) { ul.append(dishEl(r)); });
       box.append(ul);
     }
     var n = Object.keys(picked).length;
@@ -1098,12 +1166,16 @@
     var effSel = h("select", { "aria-label": "Aufwand", onchange: function (e) { draft.effort = Number(e.target.value) || 0; } },
       h("option", { value: "0" }, "keine Angabe"));
     for (var ei = 1; ei <= 5; ei++) effSel.append(h("option", { value: String(ei), selected: draft.effort === ei }, ei + " von 5 · " + EFFORT_NAMES[ei]));
-    var minIn = h("input", { type: "number", min: "1", max: "1440", step: "1", inputmode: "numeric", placeholder: "z. B. 30", "aria-label": "Ungefähre Dauer in Minuten", value: draft.minutes ? String(draft.minutes) : "",
-      oninput: function (e) { draft.minutes = Math.round(Number(e.target.value)) || 0; } });
+    var minIn = h("select", { "aria-label": "Zubereitungszeit", onchange: function (e) {
+      var c = Number(e.target.value);
+      if (c === 0) draft.minutes = 0;
+      else if (timeCat(draft.minutes) !== c) draft.minutes = TIME_CATS[c - 1].rep;
+    } }, h("option", { value: "0" }, "keine Angabe"));
+    TIME_CATS.forEach(function (tc, i) { minIn.append(h("option", { value: String(i + 1), selected: timeCat(draft.minutes) === i + 1 }, tc.label)); });
     var panel = h("div", { class: "panel" }, h("h2", null, draft.id ? "Gericht bearbeiten" : "Neues Gericht"), nameIn,
       h("div", { class: "two" },
         h("label", { class: "fl" }, "Aufwand", effSel),
-        h("label", { class: "fl" }, "Dauer in Minuten (ungefähr)", minIn)),
+        h("label", { class: "fl" }, "Zubereitungszeit", minIn)),
       h("h2", null, "Zutaten und Laden"));
     draft.ings.forEach(function (g, idx) {
       var sel = h("select", { "aria-label": "Laden für Zutat " + (idx + 1), onchange: function (e) { g.store = e.target.value; g.touched = true; } });
@@ -1239,19 +1311,18 @@
     return box;
   }
   /* Essensplan: Würfel */
-  var DICE_TIME = [[0, "egal"], [20, "bis 20 Min"], [30, "bis 30 Min"], [45, "bis 45 Min"], [60, "bis 60 Min"]];
   var diceState = {};
   function diceInit(key, slot) {
     if (!diceState[key]) {
       var saved = {};
       try { saved = JSON.parse(lsGet("pp-dice-" + slot) || "{}") || {}; } catch (e) {}
-      diceState[key] = { m: Number(saved.m) || 0, e: Number(saved.e) || 0, cur: null, seen: [] };
+      diceState[key] = { t: Array.isArray(saved.t) ? saved.t.map(Number).filter(function (x) { return x >= 1 && x <= TIME_CATS.length; }) : [], e: Number(saved.e) || 0, cur: null, seen: [] };
     }
     return diceState[key];
   }
   function dicePool(d, plannedWeek) {
     var all = (recipes || []).filter(function (r) {
-      if (d.m && !(Number(r.minutes) >= 1 && Number(r.minutes) <= d.m)) return false;
+      if (d.t.length && d.t.indexOf(timeCat(r.minutes)) < 0) return false;
       if (d.e && !(Number(r.effort) >= 1 && Number(r.effort) <= d.e)) return false;
       return true;
     });
@@ -1273,9 +1344,15 @@
   function diceEl(ds, slot, key) {
     var Cap = slot === "lunch" ? "Lunch" : "Dinner";
     var d = diceInit(key, slot);
-    var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ m: d.m, e: d.e })); d.cur = null; d.seen = []; renderMeal(); };
-    var tSel = h("select", { "aria-label": "Wie schnell soll es gehen?", onchange: function (e) { d.m = Number(e.target.value); save(); } });
-    DICE_TIME.forEach(function (t) { tSel.append(h("option", { value: String(t[0]), selected: t[0] === d.m }, t[1])); });
+    var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ t: d.t, e: d.e })); d.cur = null; d.seen = []; renderMeal(); };
+    var tSel = h("div", { class: "bought xchips timefilter", role: "group", "aria-label": "Wie schnell soll es gehen?" });
+    TIME_CATS.forEach(function (tc, i) {
+      var on = d.t.indexOf(i + 1) >= 0;
+      tSel.append(h("button", { class: "bchip" + (on ? " sel" : ""), type: "button", "aria-pressed": String(on), onclick: function () {
+        if (on) d.t = d.t.filter(function (x) { return x !== i + 1; }); else d.t = d.t.concat([i + 1]);
+        save();
+      } }, tc.short));
+    });
     var eSel = h("select", { "aria-label": "Wie viel Aufwand höchstens?", onchange: function (e) { d.e = Number(e.target.value); save(); } },
       h("option", { value: "0", selected: d.e === 0 }, "egal"));
     for (var i = 1; i <= 4; i++) eSel.append(h("option", { value: String(i), selected: d.e === i }, "höchstens " + i + " · " + EFFORT_NAMES[i]));
@@ -1283,18 +1360,19 @@
     var mon = weekStart(dn(ds));
     for (var j = 0; j < 7; j++) allDishes(plan[dnToStr(mon + j)]).forEach(function (x) { week[x.id] = true; });
     var info = dicePool(d, week), cur = (recipes || []).filter(function (r) { return r.id === d.cur; })[0];
-    var unknown = (d.m || d.e) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
+    var unknown = (d.t.length || d.e) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
     var box = h("div", { class: "dice" },
-      h("div", { class: "two" }, h("label", { class: "fl" }, "Wie schnell?", tSel), h("label", { class: "fl" }, "Wie viel Aufwand?", eSel)));
+      h("div", { class: "fl" }, h("span", null, "Wie schnell? (keine Auswahl = egal)"), tSel),
+      h("label", { class: "fl" }, "Wie viel Aufwand?", eSel));
     if (!info.all.length) {
-      box.append(h("p", { class: "noneyet" }, (d.m || d.e) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand und Dauer oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
+      box.append(h("p", { class: "noneyet" }, (d.t.length || d.e) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand und Dauer oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
     } else {
       if (cur) {
         var taken = slotsOf(plan[ds])[slot].some(function (x) { return x.id === cur.id; });
         box.append(h("div", { class: "dicecard" },
           h("div", { class: "dname" }, cur.name),
-          (effortText(cur.effort) || minutesText(cur.minutes)) ? h("div", { class: "dmeta" },
-            minutesText(cur.minutes) ? h("span", null, "⏱ " + minutesText(cur.minutes)) : null,
+          (effortText(cur.effort) || timeLabel(cur.minutes)) ? h("div", { class: "dmeta" },
+            timeLabel(cur.minutes) ? h("span", null, "⏱ " + timeLabel(cur.minutes)) : null,
             effortText(cur.effort) ? h("span", null, "Aufwand " + effortText(cur.effort)) : null) : null,
           h("p", { class: "dings" }, ingLine(cur) || "Keine Zutaten eingetragen.")));
       }
@@ -1861,8 +1939,9 @@
   }
   function nextSpendDate(sp) {
     var step = sp.repeat, last = String(sp.date), origin = String(sp.origin || sp.date);
-    if (step === "week") return dnToStr(dn(last) + 7);
-    var every = step === "year" ? 12 : 1, od = Number(origin.split("-")[2]);
+    var cnt = step === "custom" ? Math.max(1, Math.min(999, Math.round(Number(sp.every)) || 1)) : 1, un = step === "custom" ? sp.unit : "";
+    if (step === "week" || un === "w" || un === "d") return dnToStr(dn(last) + (un === "d" ? cnt : un === "w" ? 7 * cnt : 7));
+    var every = step === "year" ? 12 : un === "j" ? 12 * cnt : un === "m" ? cnt : 1, od = Number(origin.split("-")[2]);
     var n = 1;
     for (var guard = 0; guard < 2000; guard++, n++) {
       var cand = addMonthsStr(origin, n * every, od);
@@ -1901,6 +1980,7 @@
         if (!bud) break;
         var id = "x" + k + "-" + nd;
         var ns = { budget: bud.id, amount: cur.amount, category: cur.category, place: cur.place || "", what: cur.what || "", date: nd, by: cur.by || "", at: Date.now(), repeat: cur.repeat, series: k, origin: cur.origin || cur.date, auto: true };
+        if (cur.repeat === "custom") { ns.every = cur.every; ns.unit = cur.unit; }
         if (!spends.some(function (x) { return x.id === id; }) && !repPending[id]) { repPending[id] = true; writes.push(["spend/" + id, ns, id]); }
         cur = Object.assign({ id: id }, ns); n++;
       }
@@ -1923,6 +2003,16 @@
       .map(function (x) { return db.doc("spend/" + x.id).update({ repeat: "" }); }));
   }
   var REPEAT_LABEL = { week: "wöchentlich", month: "monatlich", year: "jährlich" };
+  var UNIT_NAMES = { d: ["Tag", "Tage"], w: ["Woche", "Wochen"], m: ["Monat", "Monate"], j: ["Jahr", "Jahre"] };
+  function repeatText(o) {
+    if (!o) return "";
+    if (REPEAT_LABEL[o.repeat]) return REPEAT_LABEL[o.repeat];
+    if (o.repeat === "custom" && UNIT_NAMES[o.unit]) {
+      var n = Math.round(Number(o.every)) || 1;
+      return n === 1 ? "jede" + (o.unit === "w" ? " Woche" : o.unit === "j" ? "s Jahr" : o.unit === "m" ? "n Monat" : "n Tag") : "alle " + n + " " + UNIT_NAMES[o.unit][1];
+    }
+    return "";
+  }
 
   function openBudgetForm(mode, b) {
     budgetForm = mode; confirmBudgetDel = false;
@@ -2077,7 +2167,7 @@
       var rows = mine.slice().sort(function (a, c) { return String(c.date).localeCompare(String(a.date)) || (c.at || 0) - (a.at || 0); });
       var ul = h("ul", { class: "spends" });
       rows.forEach(function (s) {
-        var meta = [String(s.category || "").trim() || "Sonstiges", s.place, s.date ? fmt(s.date) : "", REPEAT_LABEL[s.repeat] ? "↻ " + REPEAT_LABEL[s.repeat] : ""].filter(Boolean).join(" · ");
+        var meta = [String(s.category || "").trim() || "Sonstiges", s.place, s.date ? fmt(s.date) : "", repeatText(s) ? "↻ " + repeatText(s) : ""].filter(Boolean).join(" · ");
         ul.append(h("li", null,
           h("span", { class: "sw" }, s.what || String(s.category || "").trim() || "Ausgabe"),
           h("span", { class: "sa" }, eur(s.amount || 0)),
@@ -2199,6 +2289,12 @@
       curBudget = id; lsSet("pp-budget", id); budgetForm = null; formBudget = null; renderSpend(); toast("Budget gespeichert.");
     }).catch(writeFail);
   });
+  function syncRepeat() {
+    var on = $("srepeat").value === "custom";
+    $("scustom").hidden = !on; $("severy").disabled = !on;
+  }
+  $("srepeat").addEventListener("change", syncRepeat);
+  syncRepeat();
   $("spendform").addEventListener("submit", function (e) {
     e.preventDefault();
     var b = resolveBudget();
@@ -2211,9 +2307,16 @@
     var rep = $("srepeat").value;
     var sref = db.collection("spend").doc();
     if (REPEAT_LABEL[rep]) { doc.repeat = rep; doc.series = sref.id; doc.origin = date; }
+    else if (rep === "custom") {
+      var ev = Math.round(Number($("severy").value));
+      if (!(ev >= 1 && ev <= 999)) { toast("Bitte bei „Eigener Abstand“ eine Zahl von 1 bis 999 eingeben."); $("severy").focus(); return; }
+      var un = $("sunit").value;
+      if (!UNIT_NAMES[un]) un = "w";
+      doc.repeat = "custom"; doc.every = ev; doc.unit = un; doc.series = sref.id; doc.origin = date;
+    }
     sref.set(doc).then(function () {
-      $("samount").value = ""; $("swhat").value = ""; $("splace").value = ""; $("srepeat").value = "";
-      toast(eur(cents) + " eingetragen." + (doc.repeat ? " Wiederholt sich " + REPEAT_LABEL[rep] + "." : ""));
+      $("samount").value = ""; $("swhat").value = ""; $("splace").value = ""; $("srepeat").value = ""; syncRepeat();
+      toast(eur(cents) + " eingetragen." + (doc.repeat ? " Wiederholt sich " + repeatText(doc) + "." : ""));
       $("samount").focus();
     }).catch(writeFail);
   });
@@ -2289,6 +2392,7 @@
       room: $("newroom").value,
       intervalDays: days,
       points: pv,
+      together: $("newtogether").checked,
       assignee: who,
       turn: who === "abwechselnd" ? "F" : "",
       lastDone: days > 0 && $("newstart").value === "later" ? todayStr() : "",
@@ -2298,12 +2402,70 @@
       createdAt: todayStr()
     };
     db.collection("tasks").add(doc).then(function () {
-      $("newname").value = ""; $("newpoints").value = "1";
+      $("newname").value = ""; $("newpoints").value = "1"; $("newtogether").checked = false;
       toast("„" + name + "“ ist im Plan" + (days === 0 ? " (nach Bedarf)." : "."));
     }).catch(writeFail);
   });
 
   document.addEventListener("visibilitychange", function () { if (!document.hidden) render(); });
+
+  /* Farben für F und C (nur auf diesem Gerät gespeichert) */
+  var PALETTE = [
+    { k: "blau", n: "Blau", l: ["#2f4bc0", "#e3e8fb"], d: ["#8da2ff", "#1e2850"] },
+    { k: "pink", n: "Pink", l: ["#a82a77", "#f9e2f0"], d: ["#f08fcb", "#3c1d33"] },
+    { k: "rot", n: "Rot", l: ["#c0392b", "#fbe4e1"], d: ["#ff8a7a", "#4a1f1b"] },
+    { k: "orange", n: "Orange", l: ["#b85c00", "#fdebd6"], d: ["#ffb066", "#47290c"] },
+    { k: "gelb", n: "Gelb", l: ["#8a6d00", "#fbf0c4"], d: ["#f2d04d", "#40360c"] },
+    { k: "gruen", n: "Grün", l: ["#2e7d32", "#e0f2e1"], d: ["#7fd68a", "#17381b"] },
+    { k: "tuerkis", n: "Türkis", l: ["#00796b", "#d9f1ee"], d: ["#5fd8c8", "#0f3a35"] },
+    { k: "hellblau", n: "Hellblau", l: ["#0277bd", "#dcedf9"], d: ["#66c2ff", "#10344d"] },
+    { k: "violett", n: "Violett", l: ["#6a3fb5", "#ece4f8"], d: ["#b99cf2", "#2e1f4d"] },
+    { k: "braun", n: "Braun", l: ["#7b5545", "#f1e6e1"], d: ["#cfa593", "#3a2a22"] },
+    { k: "grau", n: "Grau", l: ["#546e7a", "#e4eaed"], d: ["#a9bcc6", "#27323a"] }
+  ];
+  function palOf(k) { return PALETTE.filter(function (x) { return x.k === k; })[0] || null; }
+  function isDark() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t === "dark") return true;
+    if (t === "light") return false;
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  function applyColors() {
+    var root = document.documentElement.style, dark = isDark();
+    [["F", "f"], ["C", "c"]].forEach(function (w) {
+      var pal = palOf(lsGet("pp-col" + w[0]));
+      if (!pal) { root.removeProperty("--" + w[1]); root.removeProperty("--" + w[1] + "-soft"); return; }
+      var v = dark ? pal.d : pal.l;
+      root.setProperty("--" + w[1], v[0]); root.setProperty("--" + w[1] + "-soft", v[1]);
+    });
+  }
+  function renderColors() {
+    var box = $("colorbox");
+    if (!box) return;
+    box.replaceChildren();
+    var dark = isDark();
+    var defs = { F: "blau", C: "pink" };
+    var chosen = { F: lsGet("pp-colF") || defs.F, C: lsGet("pp-colC") || defs.C };
+    ["F", "C"].forEach(function (w) {
+      var other = w === "F" ? "C" : "F";
+      var row = h("div", { class: "swatches", role: "group", "aria-label": "Farbe für " + w });
+      row.append(h("span", { class: "swl chip " + w }, w));
+      PALETTE.forEach(function (pal) {
+        var taken = chosen[other] === pal.k;
+        var on = chosen[w] === pal.k;
+        row.append(h("button", { class: "sw", type: "button", disabled: taken, "aria-pressed": String(on),
+          "aria-label": pal.n + (taken ? " (schon von " + other + " gewählt)" : ""), title: pal.n + (taken ? " (von " + other + " gewählt)" : ""),
+          style: "background:" + (dark ? pal.d[0] : pal.l[0]),
+          onclick: function () { lsSet("pp-col" + w, pal.k); applyColors(); renderColors(); } }));
+      });
+      box.append(row);
+    });
+    box.append(h("div", { class: "row" },
+      h("button", { class: "linkbtn", type: "button", onclick: function () { lsSet("pp-colF", ""); lsSet("pp-colC", ""); applyColors(); renderColors(); } }, "Farben zurücksetzen"),
+      h("span", { class: "hint" }, "Gilt nur auf diesem Gerät.")));
+  }
+  applyColors(); renderColors();
+  try { if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { applyColors(); renderColors(); }); } catch (e) {}
 
   syncControls();
   render();

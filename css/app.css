@@ -457,3 +457,25 @@ label.chk input { width: 22px; height: 22px; min-height: 0; margin-top: 2px; fle
 .xchips .bchip::before { content: "+"; }
 .xchips .bchip.sel::before { content: "✓"; }
 .xchips .bchip.sel { background: var(--g-soft, transparent); }
+
+/* Putzplan: gemeinsam erledigen */
+.togetherask { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; padding: 8px 0 4px; border-top: 1px dashed var(--line-strong); margin-top: 6px; }
+.togetherask .hint { font-size: 0.88rem; color: var(--muted); }
+.togetherask .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.timefilter .hint { font-size: .85rem; color: var(--muted); }
+.timefilter .bchip { min-height: 40px; padding: 6px 12px; }
+
+.dclock { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 0.88rem; color: var(--muted); }
+.dclock .clocks { display: inline-flex; gap: 1px; font-size: 1rem; line-height: 1; }
+.dclock .clocks .off { opacity: 0.18; filter: grayscale(1); }
+.dclock .zt { color: var(--muted); }
+
+/* Farbauswahl */
+.subh { margin: 12px 0 4px; font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.colorbox { display: flex; flex-direction: column; gap: 10px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.swatches .swl { min-width: 28px; text-align: center; }
+.sw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; }
+.sw[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 2px; }
+.sw:disabled { opacity: 0.25; cursor: not-allowed; }

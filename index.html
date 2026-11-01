@@ -138,6 +138,7 @@
         <label for="newpoints">Punkte
           <input id="newpoints" type="number" min="1" max="10" step="1" value="1" inputmode="numeric">
         </label>
+        <label class="chk wide" for="newtogether"><input id="newtogether" type="checkbox"> Kann auch zusammen erledigt werden (beide bekommen die Punkte)</label>
         <label for="newstart" id="newstartlbl">Erste Fälligkeit
           <select id="newstart">
             <option value="now">Heute</option>
@@ -383,8 +384,18 @@
             <option value="week">Jede Woche</option>
             <option value="month">Jeden Monat</option>
             <option value="year">Jedes Jahr</option>
+            <option value="custom">Eigener Abstand …</option>
           </select>
         </label>
+      </div>
+      <div class="custom" id="scustom" hidden>alle
+        <input id="severy" type="number" min="1" max="999" inputmode="numeric" value="2" aria-label="Anzahl" disabled>
+        <select id="sunit" aria-label="Einheit">
+          <option value="d">Tage</option>
+          <option value="w" selected>Wochen</option>
+          <option value="m">Monate</option>
+          <option value="j">Jahre</option>
+        </select>
       </div>
       <div class="row"><button class="primary" type="submit">Ausgabe hinzufügen</button></div>
     </form>
@@ -406,6 +417,8 @@
         <button class="linkbtn" type="button" id="doexample">Beispieldaten laden</button>
         <button class="linkbtn" type="button" id="dologout">Abmelden</button>
       </div>
+      <h3 class="subh">Farben für F und C</h3>
+      <div id="colorbox" class="colorbox"></div>
       <div id="setstatus" class="meta" role="status"></div>
       <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste.</p>
     </div>
