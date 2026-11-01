@@ -19,6 +19,7 @@
   var editing = {};
   var confirmDel = null;
   var togetherAsk = null;
+  var newFollow = {};
   var cookTimeF = {};
   var confirmExamples = false;
   var period = "30";
@@ -136,6 +137,10 @@
     var today = dn(todayStr());
     var who = t.assignee === "egal" ? "egal"
       : t.assignee === "abwechselnd" ? (t.turn === "C" ? "C" : "F") : (t.assignee === "C" ? "C" : "F");
+    if (t.pending === true) {
+      var nat = isDemand(t) ? 0 : (t.lastDone ? dn(t.lastDone) + (Number(t.intervalDays) || 7) - today : 0);
+      return { d: Math.min(0, nat), who: who, pending: true };
+    }
     if (isDemand(t)) return { d: DEMAND, who: who, demand: true };
     var days = Number(t.intervalDays) || 7;
     var due = t.lastDone ? dn(t.lastDone) + days : today;
@@ -180,10 +185,11 @@
   }
 
   /* Aktionen */
-  function markDone(t, both) {
+  function markDone(t, both, who) {
     togetherAsk = null;
+    var by = who || me;
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
-    if (!me && !both) {
+    if (!by && !both) {
       toast("Wähle oben zuerst, ob du F oder C bist.");
       var seg = $("me");
       seg.classList.remove("nudge"); void seg.offsetWidth; seg.classList.add("nudge");
@@ -191,6 +197,8 @@
       return;
     }
     var prev = {
+      pending: t.pending === true,
+      pendingBy: t.pendingBy || "",
       lastDone: t.lastDone || "",
       lastBy: t.lastBy || "",
       turn: t.turn || "",
@@ -198,33 +206,56 @@
       countC: t.countC || 0
     };
     var next = both ? {
+      pending: false, pendingBy: "",
       lastDone: todayStr(),
       lastBy: "F & C",
       countF: prev.countF + 1,
       countC: prev.countC + 1,
       turn: t.assignee === "abwechselnd" ? (t.turn === "C" ? "C" : "F") : ""
     } : {
+      pending: false, pendingBy: "",
       lastDone: todayStr(),
-      lastBy: me,
-      countF: prev.countF + (me === "F" ? 1 : 0),
-      countC: prev.countC + (me === "C" ? 1 : 0),
-      turn: t.assignee === "abwechselnd" ? (me === "F" ? "C" : "F") : ""
+      lastBy: by,
+      countF: prev.countF + (by === "F" ? 1 : 0),
+      countC: prev.countC + (by === "C" ? 1 : 0),
+      turn: t.assignee === "abwechselnd" ? (by === "F" ? "C" : "F") : ""
     };
     var demand = isDemand(t);
     var ref = db.doc("tasks/" + t.id);
-    var whoList = both ? ["F", "C"] : [me];
+    var whoList = both ? ["F", "C"] : [by];
     var lrefs = whoList.map(function () { return db.collection("log").doc(); });
     var entries = whoList.map(function (w) {
       var en = { taskId: t.id, task: t.name, room: t.room || "Überall", by: w, date: todayStr(), at: Date.now(), points: pointsOf(t) };
       if (both) en.together = true;
       return en;
     });
-    Promise.all([ref.update(next)].concat(lrefs.map(function (lr, i) { return lr.set(entries[i]); }))).then(function () {
+    var fol = (Array.isArray(t.follow) ? t.follow : []).map(function (id) { return (tasks || []).filter(function (y) { return y.id === id; })[0]; }).filter(function (x) { return x && x.id !== t.id; });
+    var folPrev = fol.map(function (x) { return { id: x.id, pending: x.pending === true, pendingBy: x.pendingBy || "" }; });
+    var folWrites = fol.map(function (x) { return db.doc("tasks/" + x.id).update({ pending: true, pendingBy: t.name }); });
+    Promise.all([ref.update(next)].concat(lrefs.map(function (lr, i) { return lr.set(entries[i]); }), folWrites)).then(function () {
       var days = Number(t.intervalDays) || 7;
-      toast("„" + t.name + "“ erledigt" + (both ? " (zusammen, beide bekommen " + pointsOf(t) + (pointsOf(t) === 1 ? " Punkt" : " Punkte") + ")." : ".") + (demand ? "" : " Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + "."), "Rückgängig", function () {
-        Promise.all([ref.update(prev)].concat(lrefs.map(function (lr) { return lr.delete(); }))).catch(writeFail);
+      toast("„" + t.name + "“ erledigt" + (both ? " (zusammen, beide bekommen " + pointsOf(t) + (pointsOf(t) === 1 ? " Punkt" : " Punkte") + ")." : ".") + (fol.length ? " Jetzt fällig: " + fol.map(function (x) { return x.name; }).join(", ") + "." : "") + (demand ? "" : " Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + "."), "Rückgängig", function () {
+        Promise.all([ref.update(prev)].concat(lrefs.map(function (lr) { return lr.delete(); }), folPrev.map(function (x) { return db.doc("tasks/" + x.id).update({ pending: x.pending, pendingBy: x.pendingBy }); }))).catch(writeFail);
       });
     }).catch(writeFail);
+  }
+  function followChips(sel, exceptId, onToggle) {
+    var wrap = h("div", { class: "bought xchips" });
+    (tasks || []).filter(function (x) { return x.id !== exceptId; }).slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "de"); }).forEach(function (x) {
+      var b = h("button", { class: "bchip" + (sel[x.id] ? " sel" : ""), type: "button", "aria-pressed": String(!!sel[x.id]), onclick: function () {
+        sel[x.id] = !sel[x.id]; b.classList.toggle("sel", !!sel[x.id]); b.setAttribute("aria-pressed", String(!!sel[x.id]));
+      } }, x.name);
+      wrap.append(b);
+    });
+    return wrap;
+  }
+  function renderNewFollow() {
+    var box = $("newfollow");
+    if (!box) return;
+    box.replaceChildren();
+    var many = (tasks || []).length > 0;
+    $("newfollowwrap").hidden = !many;
+    if (many) box.append(followChips(newFollow, null));
   }
   function deleteTask(t) {
     confirmDel = null;
@@ -241,13 +272,15 @@
   /* Darstellung: Plan */
   function row(t) {
     var inf = info(t);
-    var status = inf.demand ? "ok" : inf.d < 0 ? "late" : inf.d === 0 ? "today" : "ok";
+    var status = inf.pending ? "today" : inf.demand ? "ok" : inf.d < 0 ? "late" : inf.d === 0 ? "today" : "ok";
     var isOpen = !!open[t.id];
     var metaParts = [t.room || "Überall", intervalLabel(Number(t.intervalDays))];
     if (t.assignee === "abwechselnd") metaParts.push("abwechselnd");
     if (t.assignee === "egal") metaParts.push("egal wer");
     if (pointsOf(t) > 1) metaParts.push(pointsOf(t) + " Punkte");
     if (t.together === true) metaParts.push("auch zusammen");
+    var fol = (Array.isArray(t.follow) ? t.follow : []).map(function (id) { var x = (tasks || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ""; }).filter(Boolean);
+    if (fol.length) metaParts.push("danach: " + fol.join(", "));
     var li = h("li", { class: "task" });
     var check = h("button", { class: "check", type: "button", "aria-label": "Erledigt: " + t.name, onclick: function () {
       if (t.together === true) { togetherAsk = togetherAsk === t.id ? null : t.id; render(); } else markDone(t);
@@ -259,7 +292,7 @@
     } }, t.name);
     li.append(
       check,
-      h("div", { class: "body" }, title, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", { class: "due " + status }, inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
+      h("div", { class: "body" }, title, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
       h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who)
     );
     if (togetherAsk === t.id) {
@@ -308,6 +341,9 @@
     var pts = h("input", { type: "number", min: "1", max: "10", step: "1", inputmode: "numeric", "aria-label": "Punkte", value: String(pointsOf(t)) });
     var nm = h("input", { type: "text", maxlength: "80", "aria-label": "Name der Aufgabe", value: t.name || "", required: true });
     var tog = h("input", { type: "checkbox", checked: t.together === true });
+    var fsel = {};
+    (Array.isArray(t.follow) ? t.follow : []).forEach(function (id) { fsel[id] = true; });
+    var fbox = followChips(fsel, t.id);
     var err = h("p", { class: "autherr", role: "alert" });
     function sync() { cust.hidden = sel.value !== "custom"; n.disabled = sel.value !== "custom"; }
     sel.addEventListener("change", sync); sync();
@@ -319,14 +355,15 @@
       if (pv === null) { err.textContent = "Punkte: bitte eine ganze Zahl von 1 bis 10."; return; }
       var newName = nm.value.trim();
       if (!newName) { err.textContent = "Die Aufgabe braucht einen Namen."; return; }
-      var upd = { name: newName, intervalDays: days, assignee: who.value, points: pv, together: tog.checked };
+      var upd = { name: newName, intervalDays: days, assignee: who.value, points: pv, together: tog.checked, follow: Object.keys(fsel).filter(function (k) { return fsel[k]; }) };
       if (who.value === "abwechselnd") upd.turn = t.turn === "C" ? "C" : "F"; else upd.turn = "";
       db.doc("tasks/" + t.id).update(upd).then(function () { editing[t.id] = false; toast("Gespeichert."); }).catch(writeFail);
     } },
       h("label", null, "Name", nm),
       h("label", null, "Wie oft?", sel), cust,
       h("label", null, "Zuständig", who), h("label", null, "Punkte (wie anstrengend ist die Aufgabe?)", pts),
-      h("label", { class: "chk" }, tog, " Kann auch zusammen erledigt werden (beide bekommen die Punkte)"), err,
+      h("label", { class: "chk" }, tog, " Kann auch zusammen erledigt werden (beide bekommen die Punkte)"),
+      h("div", { class: "alsobox" }, h("span", { class: "hint" }, "Wird danach fällig (rutscht in der Liste nach oben):"), fbox), err,
       h("button", { class: "primary", type: "submit" }, "Speichern"));
   }
 
@@ -369,6 +406,7 @@
     $("today").textContent = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
     renderSummary();
     renderBanner();
+    renderNewFollow();
     renderStats();
     renderShop();
     renderCook();
@@ -1437,8 +1475,44 @@
   function evWho(e) { return e.who === "F" ? "F" : e.who === "C" ? "C" : "B"; }
   function evEndStr(e) { return e.endDate && String(e.endDate) > String(e.date) ? String(e.endDate) : String(e.date); }
   function isAllDay(e) { return e.allDay === true || !e.start; }
+  function repStep(e) {
+    var n = Math.max(1, Math.min(999, Math.round(Number(e.repEvery)) || 1));
+    return { d: e.repUnit === "d" ? n : e.repUnit === "w" ? 7 * n : 0, m: e.repUnit === "m" ? n : e.repUnit === "j" ? 12 * n : 0 };
+  }
+  function isRepeating(e) { return e && (e.repUnit === "d" || e.repUnit === "w" || e.repUnit === "m" || e.repUnit === "j"); }
+  /* Startdatum der Wiederholung, die den Tag ds abdeckt (oder null) */
+  function occCovering(e, ds) {
+    var s0 = String(e.date), d0 = dn(s0), x = dn(ds), len = dn(evEndStr(e)) - d0, st = repStep(e);
+    var until = e.repUntil ? String(e.repUntil) : "", skip = Array.isArray(e.repSkip) ? e.repSkip : [];
+    if (x < d0) return null;
+    var cands = [], j;
+    if (st.d) {
+      var k = Math.floor((x - d0) / st.d);
+      for (j = k; j >= 0 && j >= k - Math.ceil(len / st.d) - 1; j--) cands.push(dnToStr(d0 + j * st.d));
+    } else if (st.m) {
+      var a = s0.split("-").map(Number), b = ds.split("-").map(Number), od = a[2];
+      var md = (b[0] - a[0]) * 12 + (b[1] - a[1]), kk = Math.floor(md / st.m);
+      for (j = kk; j >= 0 && j >= kk - 2; j--) cands.push(addMonthsStr(s0, j * st.m, od));
+    }
+    for (var i = 0; i < cands.length; i++) {
+      var c = cands[i], cn = dn(c);
+      if (cn <= x && x <= cn + len && (!until || c <= until) && skip.indexOf(c) < 0) return c;
+    }
+    return null;
+  }
   function eventsOn(ds) {
-    return events.filter(function (e) { return e.date && String(e.date) <= ds && ds <= evEndStr(e); }).sort(function (a, b) {
+    var list = [];
+    events.forEach(function (e) {
+      if (!e.date) return;
+      if (isRepeating(e)) {
+        var s = occCovering(e, ds);
+        if (s) {
+          var len = dn(evEndStr(e)) - dn(String(e.date));
+          list.push(Object.assign({}, e, { date: s, endDate: len > 0 ? dnToStr(dn(s) + len) : "", occDate: s, master: e }));
+        }
+      } else if (String(e.date) <= ds && ds <= evEndStr(e)) list.push(e);
+    });
+    return list.sort(function (a, b) {
       var aa = isAllDay(a), bb = isAllDay(b);
       if (aa !== bb) return aa ? -1 : 1;
       return String(a.start || "").localeCompare(String(b.start || "")) || String(a.title || "").localeCompare(String(b.title || ""), "de");
@@ -1463,7 +1537,11 @@
   }
   function calHeadline() {
     var t = todayStr(), now = eventsOn(t).length;
-    var next = events.filter(function (e) { return String(e.date) > t; }).sort(function (a, b) { return String(a.date).localeCompare(String(b.date)) || String(a.start || "").localeCompare(String(b.start || "")); })[0];
+    var next = null;
+    for (var ni = 1; ni <= 366 && !next; ni++) {
+      var nds = dnToStr(dn(t) + ni);
+      next = eventsOn(nds).filter(function (e) { return String(e.date) === nds; })[0] || null;
+    }
     var txt = now === 0 ? "Heute keine Termine" : now === 1 ? "Heute 1 Termin" : "Heute " + now + " Termine";
     if (next) { var nn = dn(String(next.date)); txt += " · als Nächstes: " + (next.title || "Termin") + ", " + WD[(nn + 3) % 7] + " " + fmt(String(next.date)); }
     return txt;
@@ -1725,6 +1803,15 @@
         L.push("DTSTART:" + ds + "T" + String(e.start).replace(":", "") + "00");
         L.push("DTEND:" + end + "T" + String(e.end || e.start).replace(":", "") + "00");
       }
+      if (isRepeating(e)) {
+        var fq = { d: "DAILY", w: "WEEKLY", m: "MONTHLY", j: "YEARLY" }[e.repUnit], rule = "FREQ=" + fq + ";INTERVAL=" + (Math.round(Number(e.repEvery)) || 1);
+        if (e.repUntil) rule += ";UNTIL=" + String(e.repUntil).replace(/-/g, "") + (isAllDay(e) ? "" : "T235959");
+        L.push("RRULE:" + rule);
+        (Array.isArray(e.repSkip) ? e.repSkip : []).forEach(function (sk) {
+          var sd = String(sk).replace(/-/g, "");
+          L.push(isAllDay(e) ? "EXDATE;VALUE=DATE:" + sd : "EXDATE:" + sd + "T" + String(e.start).replace(":", "") + "00");
+        });
+      }
       L.push("SUMMARY:" + icsEsc((WHO_NAMES[evWho(e)] === "Gemeinsam" ? "" : "[" + evWho(e) + "] ") + (e.title || "Termin")));
       if (e.place) L.push("LOCATION:" + icsEsc(e.place));
       if (e.note) L.push("DESCRIPTION:" + icsEsc(e.note));
@@ -1763,7 +1850,9 @@
     renderCal();
   }
   function openEv(e, ds) {
-    evDraft = { id: e ? e.id : null }; confirmEvDel = false;
+    var occ = e && e.occDate ? e.occDate : "";
+    if (e && e.master) e = e.master;
+    evDraft = { id: e ? e.id : null, occ: occ, rep: !!(e && isRepeating(e)) }; confirmEvDel = false;
     var def = ds || dnToStr(calSel || dn(todayStr()));
     $("evtitle").value = e ? (e.title || "") : "";
     $("evwho").value = e ? evWho(e) : (me === "F" || me === "C" ? me : "B");
@@ -1775,13 +1864,27 @@
     $("evplace").value = e ? (e.place || "") : "";
     $("evnote").value = e ? (e.note || "") : "";
     $("evformtitle").textContent = e ? "Termin bearbeiten" : "Neuer Termin";
-    $("evdel").hidden = !e; $("evdel").textContent = "Termin löschen"; $("evdel").className = "linkbtn";
+    var reps = !!(e && isRepeating(e));
+    if (reps) {
+      var en = Math.round(Number(e.repEvery)) || 1;
+      $("evrep").value = en === 1 ? e.repUnit + "1" : "custom";
+      $("evevery").value = String(en); $("evunit").value = e.repUnit;
+    } else { $("evrep").value = ""; $("evevery").value = "2"; $("evunit").value = "w"; }
+    $("evuntil").value = reps && e.repUntil ? String(e.repUntil) : "";
+    $("evdel").hidden = !e; $("evdel").textContent = reps ? "Ganze Serie löschen" : "Termin löschen"; $("evdel").className = "linkbtn";
+    $("evskip").hidden = !(reps && occ); $("evskip").textContent = "Nur den " + (occ ? fmt(occ) : "") + " überspringen";
+    syncEvRep();
     syncEvAll();
     $("calmain").hidden = true; $("evform").hidden = false;
     try { window.scrollTo(0, 0); } catch (x) {}
     $("evtitle").focus();
   }
   function closeEv() { evDraft = null; confirmEvDel = false; $("evform").hidden = true; $("calmain").hidden = false; renderCal(); }
+  function syncEvRep() {
+    var v = $("evrep").value;
+    $("evrepbox").hidden = !v;
+    $("evcustom").hidden = v !== "custom"; $("evevery").disabled = v !== "custom";
+  }
   function syncEvAll() {
     var all = $("evall").checked;
     $("evtimes").hidden = all;
@@ -2232,10 +2335,18 @@
   $("icsexport").addEventListener("click", exportIcs);
   $("icsclear").addEventListener("click", clearImported);
   $("evall").addEventListener("change", syncEvAll);
+  $("evrep").addEventListener("change", syncEvRep);
+  $("evskip").addEventListener("click", function () {
+    if (!evDraft || !evDraft.id || !evDraft.occ || !db) return;
+    var cur = events.filter(function (x) { return x.id === evDraft.id; })[0];
+    if (!cur) return;
+    var skip = (Array.isArray(cur.repSkip) ? cur.repSkip : []).concat([evDraft.occ]).slice(-200);
+    db.doc("events/" + evDraft.id).update({ repSkip: skip }).then(function () { closeEv(); toast("Dieser eine Termin entfällt, die Serie läuft weiter."); }).catch(writeFail);
+  });
   $("evcancel").addEventListener("click", closeEv);
   $("evdel").addEventListener("click", function () {
     if (!evDraft || !evDraft.id || !db) return;
-    if (!confirmEvDel) { confirmEvDel = true; $("evdel").textContent = "Ja, Termin löschen"; $("evdel").className = "linkbtn danger"; return; }
+    if (!confirmEvDel) { confirmEvDel = true; $("evdel").textContent = evDraft.rep ? "Ja, alle löschen" : "Ja, Termin löschen"; $("evdel").className = "linkbtn danger"; return; }
     var id = evDraft.id;
     db.doc("events/" + id).delete().then(function () { closeEv(); toast("Termin gelöscht."); }).catch(writeFail);
   });
@@ -2250,7 +2361,17 @@
     var st = all ? "" : $("evstart").value, en = all ? "" : $("evfinish").value;
     if (!all && !st) { toast("Gib eine Startzeit ein oder wähle „ganztägig“."); return; }
     if (!all && en && (!endDate || endDate === date) && en < st) { toast("Die Endzeit liegt vor der Startzeit."); return; }
-    var doc = { title: title, who: $("evwho").value, date: date, endDate: endDate && endDate !== date ? endDate : "", allDay: all, start: st, end: en, place: $("evplace").value.trim(), note: $("evnote").value.trim() };
+    var rv = $("evrep").value, rUnit = "", rEvery = 0, rUntil = "";
+    if (rv) {
+      if (rv === "custom") {
+        rEvery = Math.round(Number($("evevery").value)); rUnit = $("evunit").value;
+        if (!(rEvery >= 1 && rEvery <= 999)) { toast("Bitte bei „Eigener Abstand“ eine Zahl von 1 bis 999 eingeben."); $("evevery").focus(); return; }
+      } else { rUnit = rv.charAt(0); rEvery = 1; }
+      if (["d", "w", "m", "j"].indexOf(rUnit) < 0) { rUnit = ""; rEvery = 0; }
+      rUntil = $("evuntil").value || "";
+      if (rUntil && rUntil < date) { toast("„Wiederholen bis“ liegt vor dem Startdatum."); return; }
+    }
+    var doc = { repUnit: rUnit, repEvery: rEvery, repUntil: rUntil, title: title, who: $("evwho").value, date: date, endDate: endDate && endDate !== date ? endDate : "", allDay: all, start: st, end: en, place: $("evplace").value.trim(), note: $("evnote").value.trim() };
     var p;
     if (evDraft && evDraft.id) p = db.doc("events/" + evDraft.id).update(doc);
     else { doc.by = me || ""; doc.at = Date.now(); p = db.collection("events").add(doc); }
@@ -2393,6 +2514,7 @@
       intervalDays: days,
       points: pv,
       together: $("newtogether").checked,
+      follow: Object.keys(newFollow).filter(function (k) { return newFollow[k]; }),
       assignee: who,
       turn: who === "abwechselnd" ? "F" : "",
       lastDone: days > 0 && $("newstart").value === "later" ? todayStr() : "",
@@ -2402,7 +2524,7 @@
       createdAt: todayStr()
     };
     db.collection("tasks").add(doc).then(function () {
-      $("newname").value = ""; $("newpoints").value = "1"; $("newtogether").checked = false;
+      $("newname").value = ""; $("newpoints").value = "1"; $("newtogether").checked = false; newFollow = {}; renderNewFollow();
       toast("„" + name + "“ ist im Plan" + (days === 0 ? " (nach Bedarf)." : "."));
     }).catch(writeFail);
   });
