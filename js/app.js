@@ -254,8 +254,7 @@
     if (!box) return;
     box.replaceChildren();
     var many = (tasks || []).length > 0;
-    $("newfollowwrap").hidden = !many;
-    if (many) box.append(followChips(newFollow, null));
+    box.append(many ? followChips(newFollow, null) : h("p", { class: "hint" }, "Noch keine andere Aufgabe da. Lege zuerst eine zweite an, dann kannst du sie hier verknüpfen."));
   }
   function deleteTask(t) {
     confirmDel = null;
@@ -343,7 +342,7 @@
     var tog = h("input", { type: "checkbox", checked: t.together === true });
     var fsel = {};
     (Array.isArray(t.follow) ? t.follow : []).forEach(function (id) { fsel[id] = true; });
-    var fbox = followChips(fsel, t.id);
+    var fbox = (tasks || []).some(function (x) { return x.id !== t.id; }) ? followChips(fsel, t.id) : h("p", { class: "hint" }, "Noch keine andere Aufgabe da. Sobald es eine zweite gibt, kannst du sie hier verknüpfen.");
     var err = h("p", { class: "autherr", role: "alert" });
     function sync() { cust.hidden = sel.value !== "custom"; n.disabled = sel.value !== "custom"; }
     sel.addEventListener("change", sync); sync();
@@ -363,7 +362,7 @@
       h("label", null, "Wie oft?", sel), cust,
       h("label", null, "Zuständig", who), h("label", null, "Punkte (wie anstrengend ist die Aufgabe?)", pts),
       h("label", { class: "chk" }, tog, " Kann auch zusammen erledigt werden (beide bekommen die Punkte)"),
-      h("div", { class: "alsobox" }, h("span", { class: "hint" }, "Wird danach fällig (rutscht in der Liste nach oben):"), fbox), err,
+      h("div", { class: "alsobox" }, h("span", { class: "hint" }, "Verknüpfen: Welche Aufgabe wird fällig, wenn diese abgehakt wird?"), fbox), err,
       h("button", { class: "primary", type: "submit" }, "Speichern"));
   }
 

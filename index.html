@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
-<link rel="stylesheet" href="css/app.css?v=18">
+<link rel="stylesheet" href="css/app.css?v=19">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -139,7 +139,7 @@
           <input id="newpoints" type="number" min="1" max="10" step="1" value="1" inputmode="numeric">
         </label>
         <label class="chk wide" for="newtogether"><input id="newtogether" type="checkbox"> Kann auch zusammen erledigt werden (beide bekommen die Punkte)</label>
-        <div class="wide alsobox" id="newfollowwrap" hidden><span class="hint">Wird danach fällig, rutscht nach oben (optional):</span><div id="newfollow"></div></div>
+        <div class="wide alsobox" id="newfollowwrap"><span class="hint"><b>Verknüpfen:</b> Welche Aufgabe wird fällig, wenn diese abgehakt wird? (optional)</span><div id="newfollow"></div></div>
         <label for="newstart" id="newstartlbl">Erste Fälligkeit
           <select id="newstart">
             <option value="now">Heute</option>
@@ -455,7 +455,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=18"></script>
-<script src="js/app.js?v=18"></script>
+<script src="js/store-supabase.js?v=19"></script>
+<script src="js/app.js?v=19"></script>
 </body>
 </html>
