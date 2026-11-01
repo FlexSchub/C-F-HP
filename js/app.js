@@ -2453,7 +2453,7 @@
       PALETTE.forEach(function (pal) {
         var taken = chosen[other] === pal.k;
         var on = chosen[w] === pal.k;
-        row.append(h("button", { class: "sw", type: "button", disabled: taken, "aria-pressed": String(on),
+        row.append(h("button", { class: "cswatch", type: "button", disabled: taken, "aria-pressed": String(on),
           "aria-label": pal.n + (taken ? " (schon von " + other + " gewählt)" : ""), title: pal.n + (taken ? " (von " + other + " gewählt)" : ""),
           style: "background:" + (dark ? pal.d[0] : pal.l[0]),
           onclick: function () { lsSet("pp-col" + w, pal.k); applyColors(); renderColors(); } }));
