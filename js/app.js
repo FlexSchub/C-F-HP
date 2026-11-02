@@ -301,7 +301,7 @@
     } }, t.name);
     li.append(
       check,
-      h("div", { class: "body" }, title, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
+      h("div", { class: "body" }, title, h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
       h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who)
     );
     if (togetherAsk === t.id) {
@@ -326,7 +326,7 @@
           h("button", { class: "linkbtn", type: "button", onclick: function () { editing[t.id] = !editing[t.id]; render(); } }, editing[t.id] ? "Ändern schließen" : "Name und Rhythmus ändern"),
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = t.id; render(); } }, "Aufgabe löschen"));
       }
-      li.append(h("div", { class: "more" }, h("div", null, last), editing[t.id] ? editForm(t) : null, actions));
+      li.append(h("div", { class: "more" }, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", null, last), editing[t.id] ? editForm(t) : null, actions));
     }
     return li;
   }
@@ -970,10 +970,15 @@
       dinner: Array.isArray(doc.dinner) ? doc.dinner : (Array.isArray(doc.dishes) ? doc.dishes : []),
       outLunch: doc.outLunch === true, noteLunch: String(doc.noteLunch || ""),
       outDinner: doc.outDinner === true, noteDinner: String(doc.noteDinner || ""),
-      listedLunch: doc.listedLunch === true, listedDinner: doc.listedDinner === true
+      listedLunch: doc.listedLunch === true, listedDinner: doc.listedDinner === true,
+      snack: Array.isArray(doc.snack) ? doc.snack : [], prep: Array.isArray(doc.prep) ? doc.prep : [],
+      outSnack: false, noteSnack: "", outPrep: false, notePrep: "",
+      listedSnack: doc.listedSnack === true, listedPrep: doc.listedPrep === true
     };
   }
-  function allDishes(doc) { var st = slotsOf(doc); return st.lunch.concat(st.dinner); }
+  var SLOTS = ["lunch", "dinner", "snack", "prep"];
+  function capOf(slot) { return slot.charAt(0).toUpperCase() + slot.slice(1); }
+  function allDishes(doc) { var st = slotsOf(doc); return st.lunch.concat(st.dinner, st.snack, st.prep); }
   function renderCookStats() {
     var box = $("cookstats");
     box.replaceChildren();
@@ -1110,7 +1115,7 @@
     pantryCtx.slots.forEach(function (sp) { (byDay[sp.ds] = byDay[sp.ds] || []).push(sp.slot); });
     Object.keys(byDay).forEach(function (ds) {
       var cur = slotsOf(plan[ds]);
-      byDay[ds].forEach(function (sl) { cur["listed" + (sl === "lunch" ? "Lunch" : "Dinner")] = true; });
+      byDay[ds].forEach(function (sl) { cur["listed" + capOf(sl)] = true; });
       saveDay(ds, cur);
     });
   }
@@ -1285,14 +1290,14 @@
   function dnToStr(n) { var d = new Date(n * 864e5); return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()); }
   function saveDay(ds, st) {
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
-    var empty = !st.lunch.length && !st.dinner.length && !st.outLunch && !st.outDinner;
+    var empty = !st.lunch.length && !st.dinner.length && !st.snack.length && !st.prep.length && !st.outLunch && !st.outDinner;
     var p = empty ? db.doc("plan/" + ds).delete()
-      : db.doc("plan/" + ds).set({ date: ds, lunch: st.lunch, dinner: st.dinner, outLunch: st.outLunch, noteLunch: st.noteLunch, outDinner: st.outDinner, noteDinner: st.noteDinner, listedLunch: st.listedLunch === true, listedDinner: st.listedDinner === true, at: Date.now() });
+      : db.doc("plan/" + ds).set({ date: ds, lunch: st.lunch, dinner: st.dinner, outLunch: st.outLunch, noteLunch: st.noteLunch, outDinner: st.outDinner, noteDinner: st.noteDinner, listedLunch: st.listedLunch === true, listedDinner: st.listedDinner === true, snack: st.snack, prep: st.prep, listedSnack: st.listedSnack === true, listedPrep: st.listedPrep === true, at: Date.now() });
     p.catch(writeFail);
   }
-  var SLOT_NAMES = { lunch: "Mittagessen", dinner: "Abendessen" };
+  var SLOT_NAMES = { lunch: "Mittagessen", dinner: "Abendessen", snack: "Snack", prep: "Mealprep" };
   function slotEl(ds, slot) {
-    var Cap = slot === "lunch" ? "Lunch" : "Dinner";
+    var Cap = capOf(slot);
     var st = slotsOf(plan[ds]);
     var dishes = st[slot], out = st["out" + Cap];
     var key = ds + "|" + slot;
@@ -1353,7 +1358,7 @@
     var open1 = pickDay === key + "|dish", open2 = pickDay === key + "|out", open3 = pickDay === key + "|dice";
     acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open1 ? null : key + "|dish"; renderMeal(); } }, open1 ? "Schließen" : "+ Gericht"));
     acts.append(h("button", { class: "linkbtn", type: "button", "aria-label": SLOT_NAMES[slot] + " auswürfeln", onclick: function () { pickDay = open3 ? null : key + "|dice"; renderMeal(); } }, open3 ? "Würfel schließen" : "🎲 Würfeln"));
-    if (!out) acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open2 ? null : key + "|out"; renderMeal(); } }, open2 ? "Schließen" : "Auswärts"));
+    if (!out && (slot === "lunch" || slot === "dinner")) acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open2 ? null : key + "|out"; renderMeal(); } }, open2 ? "Schließen" : "Auswärts"));
     box.append(acts);
     return box;
   }
@@ -1389,7 +1394,7 @@
     d.cur = pick.id; d.seen.push(pick.id);
   }
   function diceEl(ds, slot, key) {
-    var Cap = slot === "lunch" ? "Lunch" : "Dinner";
+    var Cap = capOf(slot);
     var d = diceInit(key, slot);
     var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ t: d.t, e: d.e })); d.cur = null; d.seen = []; renderMeal(); };
     var tSel = h("div", { class: "bought xchips timefilter", role: "group", "aria-label": "Wie schnell soll es gehen?" });
@@ -1437,7 +1442,14 @@
   function dayEl(n, ds, today) {
     var cls = "day" + (n === today ? " today" : "") + (n < today ? " past" : "");
     var lab = h("div", { class: "dlab" }, h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n)));
-    return h("div", { class: cls }, lab, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
+    var st = slotsOf(plan[ds]), meals = h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")), adds = h("div", { class: "slotact extraact" });
+    ["snack", "prep"].forEach(function (s) {
+      var shown = st[s].length || (pickDay && pickDay.indexOf(ds + "|" + s + "|") === 0);
+      if (shown) meals.append(slotEl(ds, s));
+      else adds.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = ds + "|" + s + "|dish"; renderMeal(); } }, "+ " + SLOT_NAMES[s]));
+    });
+    if (adds.children.length) meals.append(adds);
+    return h("div", { class: cls }, lab, meals);
   }
   function renderMeal() {
     var box = $("mealdays");
@@ -1451,11 +1463,11 @@
     for (var i = 0; i < 7; i++) {
       var n = mon + i, ds = dnToStr(n);
       var st = slotsOf(plan[ds]);
-      var dishes = st.lunch.concat(st.dinner);
+      var dishes = st.lunch.concat(st.dinner, st.snack, st.prep);
       total += dishes.length;
       outN += (st.outLunch ? 1 : 0) + (st.outDinner ? 1 : 0);
       dishes.forEach(function (d) { ids[d.id] = true; });
-      if (n >= today) [["lunch", "Lunch"], ["dinner", "Dinner"]].forEach(function (sp) {
+      if (n >= today) SLOTS.forEach(function (s0) { var sp = [s0, capOf(s0)];
         if (!st[sp[0]].length) return;
         allSlots.push({ ds: ds, slot: sp[0] });
         if (!st["listed" + sp[1]]) { pendSlots.push({ ds: ds, slot: sp[0] }); st[sp[0]].forEach(function (d) { pendIds[d.id] = true; }); }
@@ -1974,7 +1986,7 @@
         var txt = out ? "Auswärts" + (note ? ": " + note : "") : dishes.length ? dishes.map(function (d) { var r = recipes.filter(function (x) { return x.id === d.id; })[0]; return r ? r.name : d.name; }).join(", ") : "noch nichts geplant";
         return h("div", { class: "mline" }, h("span", { class: "slabel" }, name), h("span", { class: dishes.length || out ? "mt" : "mt none" }, txt));
       };
-      box.append(homeCard("Essen heute", "meal", [line("Mittagessen", st.lunch, st.outLunch, st.noteLunch), line("Abendessen", st.dinner, st.outDinner, st.noteDinner)], "Essensplan"));
+      box.append(homeCard("Essen heute", "meal", [line("Mittagessen", st.lunch, st.outLunch, st.noteLunch), line("Abendessen", st.dinner, st.outDinner, st.noteDinner)].concat(st.snack.length ? [line("Snack", st.snack, false, "")] : [], st.prep.length ? [line("Mealprep", st.prep, false, "")] : []), "Essensplan"));
     }
 
     /* Einkauf */
