@@ -971,14 +971,14 @@
       outLunch: doc.outLunch === true, noteLunch: String(doc.noteLunch || ""),
       outDinner: doc.outDinner === true, noteDinner: String(doc.noteDinner || ""),
       listedLunch: doc.listedLunch === true, listedDinner: doc.listedDinner === true,
-      snack: Array.isArray(doc.snack) ? doc.snack : [], prep: Array.isArray(doc.prep) ? doc.prep : [],
-      outSnack: false, noteSnack: "", outPrep: false, notePrep: "",
-      listedSnack: doc.listedSnack === true, listedPrep: doc.listedPrep === true
+      kindLunch: kindOk(doc.kindLunch), kindDinner: kindOk(doc.kindDinner)
     };
   }
-  var SLOTS = ["lunch", "dinner", "snack", "prep"];
+  var SLOTS = ["lunch", "dinner"];
+  var KIND_NAMES = { out: "Auswärts", snack: "Snack", prep: "Mealprep" };
+  function kindOk(k) { return k === "snack" || k === "prep" ? k : "out"; }
   function capOf(slot) { return slot.charAt(0).toUpperCase() + slot.slice(1); }
-  function allDishes(doc) { var st = slotsOf(doc); return st.lunch.concat(st.dinner, st.snack, st.prep); }
+  function allDishes(doc) { var st = slotsOf(doc); return st.lunch.concat(st.dinner); }
   function renderCookStats() {
     var box = $("cookstats");
     box.replaceChildren();
@@ -990,7 +990,7 @@
       var n = dn(ds);
       if (isNaN(n) || n > today) return;
       var st0 = slotsOf(plan[ds]);
-      if (span === null || n >= today - (span - 1)) outN += (st0.outLunch ? 1 : 0) + (st0.outDinner ? 1 : 0);
+      if (span === null || n >= today - (span - 1)) outN += (st0.outLunch && st0.kindLunch === "out" ? 1 : 0) + (st0.outDinner && st0.kindDinner === "out" ? 1 : 0);
       allDishes(plan[ds]).forEach(function (d) {
         var rec = recipes.filter(function (r) { return r.id === d.id; })[0];
         var key = d.id || d.name;
@@ -1290,9 +1290,9 @@
   function dnToStr(n) { var d = new Date(n * 864e5); return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()); }
   function saveDay(ds, st) {
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
-    var empty = !st.lunch.length && !st.dinner.length && !st.snack.length && !st.prep.length && !st.outLunch && !st.outDinner;
+    var empty = !st.lunch.length && !st.dinner.length && !st.outLunch && !st.outDinner;
     var p = empty ? db.doc("plan/" + ds).delete()
-      : db.doc("plan/" + ds).set({ date: ds, lunch: st.lunch, dinner: st.dinner, outLunch: st.outLunch, noteLunch: st.noteLunch, outDinner: st.outDinner, noteDinner: st.noteDinner, listedLunch: st.listedLunch === true, listedDinner: st.listedDinner === true, snack: st.snack, prep: st.prep, listedSnack: st.listedSnack === true, listedPrep: st.listedPrep === true, at: Date.now() });
+      : db.doc("plan/" + ds).set({ date: ds, lunch: st.lunch, dinner: st.dinner, outLunch: st.outLunch, noteLunch: st.noteLunch, outDinner: st.outDinner, noteDinner: st.noteDinner, listedLunch: st.listedLunch === true, listedDinner: st.listedDinner === true, kindLunch: st.outLunch ? st.kindLunch : "out", kindDinner: st.outDinner ? st.kindDinner : "out", at: Date.now() });
     p.catch(writeFail);
   }
   var SLOT_NAMES = { lunch: "Mittagessen", dinner: "Abendessen", snack: "Snack", prep: "Mealprep" };
@@ -1305,8 +1305,9 @@
     var chips = h("div", { class: "mealchips" });
     if (out) {
       var note = st["note" + Cap];
-      chips.append(h("span", { class: "meal out" }, "Auswärts" + (note ? ": " + note : ""),
-        h("button", { class: "x", type: "button", "aria-label": SLOT_NAMES[slot] + " auswärts entfernen", onclick: function () {
+      var kn = KIND_NAMES[st["kind" + Cap]] || "Auswärts";
+      chips.append(h("span", { class: "meal out" }, kn + (note ? ": " + note : ""),
+        h("button", { class: "x", type: "button", "aria-label": SLOT_NAMES[slot] + ": " + kn + " entfernen", onclick: function () {
           var cur = slotsOf(plan[ds]); cur["out" + Cap] = false; cur["note" + Cap] = ""; saveDay(ds, cur);
         } }, "×")));
     }
@@ -1319,7 +1320,7 @@
         } }, "×")));
     });
     if (chips.children.length) box.append(chips);
-    else if (pickDay !== key + "|dish" && pickDay !== key + "|out") box.append(h("p", { class: "noneyet" }, "Noch nichts geplant"));
+    else if (pickDay !== key + "|dish" && !/\|(out|snack|prep)$/.test(String(pickDay))) box.append(h("p", { class: "noneyet" }, "Noch nichts geplant"));
 
     if (pickDay === key + "|dish") {
       var list = (recipes || []).slice().sort(function (a, b) {
@@ -1342,11 +1343,13 @@
         box.append(pk);
       }
     }
-    if (pickDay === key + "|out") {
-      var inp = h("input", { type: "text", maxlength: "60", placeholder: "Wo? z. B. bei Oma (kann leer bleiben)", "aria-label": "Wo seid ihr eingeladen?" });
+    var mk = ["out", "snack", "prep"].filter(function (k) { return pickDay === key + "|" + k; })[0];
+    if (mk) {
+      var ph = { out: "Wo? z. B. bei Oma (kann leer bleiben)", snack: "Was? z. B. Obst (kann leer bleiben)", prep: "Was wird vorbereitet? (kann leer bleiben)" }[mk];
+      var inp = h("input", { type: "text", maxlength: "60", placeholder: ph, "aria-label": "Notiz zu " + KIND_NAMES[mk] });
       var go = function () {
         var cur = slotsOf(plan[ds]);
-        cur[slot] = []; cur["out" + Cap] = true; cur["note" + Cap] = inp.value.trim(); cur["listed" + Cap] = false;
+        cur[slot] = []; cur["out" + Cap] = true; cur["kind" + Cap] = mk; cur["note" + Cap] = inp.value.trim(); cur["listed" + Cap] = false;
         pickDay = null; saveDay(ds, cur); renderMeal();
       };
       inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); go(); } });
@@ -1355,10 +1358,13 @@
     }
     if (pickDay === key + "|dice") box.append(diceEl(ds, slot, key));
     var acts = h("div", { class: "slotact" });
-    var open1 = pickDay === key + "|dish", open2 = pickDay === key + "|out", open3 = pickDay === key + "|dice";
+    var open1 = pickDay === key + "|dish", open3 = pickDay === key + "|dice";
     acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open1 ? null : key + "|dish"; renderMeal(); } }, open1 ? "Schließen" : "+ Gericht"));
     acts.append(h("button", { class: "linkbtn", type: "button", "aria-label": SLOT_NAMES[slot] + " auswürfeln", onclick: function () { pickDay = open3 ? null : key + "|dice"; renderMeal(); } }, open3 ? "Würfel schließen" : "🎲 Würfeln"));
-    if (!out && (slot === "lunch" || slot === "dinner")) acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open2 ? null : key + "|out"; renderMeal(); } }, open2 ? "Schließen" : "Auswärts"));
+    if (!out) ["out", "snack", "prep"].forEach(function (k) {
+      var o = pickDay === key + "|" + k;
+      acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = o ? null : key + "|" + k; renderMeal(); } }, o ? "Schließen" : KIND_NAMES[k]));
+    });
     box.append(acts);
     return box;
   }
@@ -1442,14 +1448,7 @@
   function dayEl(n, ds, today) {
     var cls = "day" + (n === today ? " today" : "") + (n < today ? " past" : "");
     var lab = h("div", { class: "dlab" }, h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n)));
-    var st = slotsOf(plan[ds]), meals = h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")), adds = h("div", { class: "slotact extraact" });
-    ["snack", "prep"].forEach(function (s) {
-      var shown = st[s].length || (pickDay && pickDay.indexOf(ds + "|" + s + "|") === 0);
-      if (shown) meals.append(slotEl(ds, s));
-      else adds.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = ds + "|" + s + "|dish"; renderMeal(); } }, "+ " + SLOT_NAMES[s]));
-    });
-    if (adds.children.length) meals.append(adds);
-    return h("div", { class: cls }, lab, meals);
+    return h("div", { class: cls }, lab, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
   }
   function renderMeal() {
     var box = $("mealdays");
@@ -1463,9 +1462,9 @@
     for (var i = 0; i < 7; i++) {
       var n = mon + i, ds = dnToStr(n);
       var st = slotsOf(plan[ds]);
-      var dishes = st.lunch.concat(st.dinner, st.snack, st.prep);
+      var dishes = st.lunch.concat(st.dinner);
       total += dishes.length;
-      outN += (st.outLunch ? 1 : 0) + (st.outDinner ? 1 : 0);
+      outN += (st.outLunch && st.kindLunch === "out" ? 1 : 0) + (st.outDinner && st.kindDinner === "out" ? 1 : 0);
       dishes.forEach(function (d) { ids[d.id] = true; });
       if (n >= today) SLOTS.forEach(function (s0) { var sp = [s0, capOf(s0)];
         if (!st[sp[0]].length) return;
@@ -1982,11 +1981,11 @@
     /* Essen */
     if (planLoaded && recipes !== null) {
       var st = slotsOf(plan[ts]);
-      var line = function (name, dishes, out, note) {
-        var txt = out ? "Auswärts" + (note ? ": " + note : "") : dishes.length ? dishes.map(function (d) { var r = recipes.filter(function (x) { return x.id === d.id; })[0]; return r ? r.name : d.name; }).join(", ") : "noch nichts geplant";
+      var line = function (name, dishes, out, note, kind) {
+        var txt = out ? (KIND_NAMES[kind] || "Auswärts") + (note ? ": " + note : "") : dishes.length ? dishes.map(function (d) { var r = recipes.filter(function (x) { return x.id === d.id; })[0]; return r ? r.name : d.name; }).join(", ") : "noch nichts geplant";
         return h("div", { class: "mline" }, h("span", { class: "slabel" }, name), h("span", { class: dishes.length || out ? "mt" : "mt none" }, txt));
       };
-      box.append(homeCard("Essen heute", "meal", [line("Mittagessen", st.lunch, st.outLunch, st.noteLunch), line("Abendessen", st.dinner, st.outDinner, st.noteDinner)].concat(st.snack.length ? [line("Snack", st.snack, false, "")] : [], st.prep.length ? [line("Mealprep", st.prep, false, "")] : []), "Essensplan"));
+      box.append(homeCard("Essen heute", "meal", [line("Mittagessen", st.lunch, st.outLunch, st.noteLunch, st.kindLunch), line("Abendessen", st.dinner, st.outDinner, st.noteDinner, st.kindDinner)], "Essensplan"));
     }
 
     /* Einkauf */
