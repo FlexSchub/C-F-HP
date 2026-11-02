@@ -287,12 +287,11 @@
     if (t.assignee === "abwechselnd") metaParts.push("abwechselnd");
     if (t.assignee === "egal") metaParts.push("egal wer");
     if (pointsOf(t) > 1) metaParts.push(pointsOf(t) + " Punkte");
-    if (t.together === true) metaParts.push("auch zusammen");
     var fol = (Array.isArray(t.follow) ? t.follow : []).map(function (id) { var x = (tasks || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ""; }).filter(Boolean);
     if (fol.length) metaParts.push("danach: " + fol.join(", "));
     var li = h("li", { class: "task" });
     var check = h("button", { class: "check", type: "button", "aria-label": "Erledigt: " + t.name, onclick: function () {
-      if (t.together === true) { togetherAsk = togetherAsk === t.id ? null : t.id; render(); } else markDone(t);
+      markDone(t);
     } });
     check.innerHTML = CHECK;
     var title = h("button", { class: "title", type: "button", "aria-expanded": isOpen ? "true" : "false", onclick: function () {
@@ -302,17 +301,10 @@
     li.append(
       check,
       h("div", { class: "body" }, title, h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
-      h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who)
+      h("div", { class: "side" },
+        h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who),
+        h("button", { class: "tog", type: "button", title: "Zusammen erledigt (beide bekommen die Punkte)", "aria-label": "Zusammen erledigt: " + t.name, onclick: function () { markDone(t, true); } }, "👥"))
     );
-    if (togetherAsk === t.id) {
-      var pp = pointsOf(t);
-      li.append(h("div", { class: "togetherask" },
-        h("span", { class: "hint" }, "Wer hat es gemacht?"),
-        h("div", { class: "row" },
-          h("button", { class: "primary", type: "button", onclick: function () { markDone(t, false); } }, me ? "Nur ich (" + me + ")" : "Nur ich"),
-          h("button", { class: "primary alt", type: "button", onclick: function () { markDone(t, true); } }, "Zusammen (beide " + pp + (pp === 1 ? " Punkt" : " Punkte") + ")"),
-          h("button", { class: "linkbtn", type: "button", onclick: function () { togetherAsk = null; render(); } }, "Abbrechen"))));
-    }
     if (isOpen) {
       var last = t.lastDone ? "Zuletzt erledigt von " + (t.lastBy || "?") + " am " + fmt(t.lastDone) + "." : "Noch nie erledigt.";
       var actions = h("div", { class: "row" });
@@ -349,7 +341,6 @@
     who.value = t.assignee || "F";
     var pts = h("input", { type: "number", min: "1", max: "10", step: "1", inputmode: "numeric", "aria-label": "Punkte", value: String(pointsOf(t)) });
     var nm = h("input", { type: "text", maxlength: "80", "aria-label": "Name der Aufgabe", value: t.name || "", required: true });
-    var tog = h("input", { type: "checkbox", checked: t.together === true });
     var fsel = {};
     (Array.isArray(t.follow) ? t.follow : []).forEach(function (id) { fsel[id] = true; });
     var fbox = (tasks || []).some(function (x) { return x.id !== t.id; }) ? followChips(fsel, t.id) : h("p", { class: "hint" }, "Noch keine andere Aufgabe da. Sobald es eine zweite gibt, kannst du sie hier verknüpfen.");
@@ -364,14 +355,13 @@
       if (pv === null) { err.textContent = "Punkte: bitte eine ganze Zahl von 1 bis 10."; return; }
       var newName = nm.value.trim();
       if (!newName) { err.textContent = "Die Aufgabe braucht einen Namen."; return; }
-      var upd = { name: newName, intervalDays: days, assignee: who.value, points: pv, together: tog.checked, follow: Object.keys(fsel).filter(function (k) { return fsel[k]; }) };
+      var upd = { name: newName, intervalDays: days, assignee: who.value, points: pv, follow: Object.keys(fsel).filter(function (k) { return fsel[k]; }) };
       if (who.value === "abwechselnd") upd.turn = t.turn === "C" ? "C" : "F"; else upd.turn = "";
       db.doc("tasks/" + t.id).update(upd).then(function () { editing[t.id] = false; toast("Gespeichert."); }).catch(writeFail);
     } },
       h("label", null, "Name", nm),
       h("label", null, "Wie oft?", sel), cust,
       h("label", null, "Zuständig", who), h("label", null, "Punkte (wie anstrengend ist die Aufgabe?)", pts),
-      h("label", { class: "chk" }, tog, " Kann auch zusammen erledigt werden (beide bekommen die Punkte)"),
       h("div", { class: "alsobox" }, h("span", { class: "hint" }, "Verknüpfen: Welche Aufgabe wird fällig, wenn diese abgehakt wird?"), fbox), err,
       h("button", { class: "primary", type: "submit" }, "Speichern"));
   }
@@ -2544,7 +2534,6 @@
       room: $("newroom").value,
       intervalDays: days,
       points: pv,
-      together: $("newtogether").checked,
       follow: Object.keys(newFollow).filter(function (k) { return newFollow[k]; }),
       assignee: who,
       turn: who === "abwechselnd" ? "F" : "",
@@ -2555,7 +2544,7 @@
       createdAt: todayStr()
     };
     db.collection("tasks").add(doc).then(function () {
-      $("newname").value = ""; $("newpoints").value = "1"; $("newtogether").checked = false; newFollow = {}; renderNewFollow();
+      $("newname").value = ""; $("newpoints").value = "1"; newFollow = {}; renderNewFollow();
       toast("„" + name + "“ ist im Plan" + (days === 0 ? " (nach Bedarf)." : "."));
     }).catch(writeFail);
   });
