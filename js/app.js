@@ -20,7 +20,7 @@
   var confirmDel = null;
   var togetherAsk = null;
   var newFollow = {};
-  var cookTimeF = {};
+  var cookTm = 0, cookEm = 0, openDish = {}, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -923,6 +923,29 @@
     return h("div", { class: "dclock", role: "img", "aria-label": "Zeit " + c + " von 5, " + TIME_CATS[c - 1].label, title: TIME_CATS[c - 1].label },
       h("span", { class: "zl" }, "Zeit"), scale);
   }
+  /* Bedienbare Skala: 5 Symbole, Tippen auf n wählt n, nochmal Tippen löscht */
+  function scaleInput(icon, val, aria, onpick) {
+    var wrap = h("span", { class: "scale", role: "group", "aria-label": aria });
+    for (var i = 1; i <= 5; i++) (function (n) {
+      wrap.append(h("button", { class: "sc" + (n <= val ? " on" : ""), type: "button", "aria-pressed": String(n === val), "aria-label": aria + ": " + n + " von 5", onclick: function () { onpick(n === val ? 0 : n); } }, icon));
+    })(i);
+    return wrap;
+  }
+  function boltEl(n) {
+    n = Math.round(Number(n));
+    if (!(n >= 1 && n <= 5)) return null;
+    var scale = h("span", { class: "clocks", "aria-hidden": "true" });
+    for (var i = 1; i <= 5; i++) scale.append(h("span", { class: i <= n ? "on" : "off" }, "⚡"));
+    return h("div", { class: "dclock", role: "img", "aria-label": "Aufwand " + n + " von 5, " + EFFORT_NAMES[n], title: EFFORT_NAMES[n] }, h("span", { class: "zl" }, "Aufwand"), scale);
+  }
+  function labelsOf(r) { return (Array.isArray(r.labels) ? r.labels : []).map(function (id) { return labelDefs.filter(function (l) { return l.id === id; })[0]; }).filter(Boolean); }
+  function labelsEl(r) {
+    var ls = labelsOf(r);
+    if (!ls.length) return null;
+    var box = h("span", { class: "dlabels" });
+    ls.forEach(function (l) { box.append(h("span", { class: "dlabel", role: "img", "aria-label": l.name, title: l.name }, l.emoji)); });
+    return box;
+  }
   function timeLabel(m) { var c = timeCat(m); return c ? TIME_CATS[c - 1].short : ""; }
   function minutesText(m) { m = Math.round(Number(m)); if (!(m >= 1)) return ""; return m >= 60 ? Math.floor(m / 60) + " Std" + (m % 60 ? " " + (m % 60) + " Min" : "") : m + " Min"; }
   var KIND_NAMES = { "": "Zutat", opt: "Optional (Topping, Extra)", stock: "Immer da (Gewürz, Vorrat)" };
@@ -934,22 +957,24 @@
     return (m || (x ? "" : "")) + (x ? (m ? " · " : "") + "optional/Vorrat: " + x : "");
   }
   function dishEl(r) {
-    var on = !!picked[r.id];
+    var on = !!picked[r.id], isOpen = !!openDish[r.id];
     var ings = mainIngs(r), nExtra = extraIngs(r).length;
     var pick = h("button", { class: "pick", type: "button", "aria-pressed": String(on), "aria-label": (on ? "Abwählen: " : "Auswählen: ") + r.name, onclick: function () {
       if (picked[r.id]) delete picked[r.id]; else picked[r.id] = true;
       renderCook();
     } });
     pick.innerHTML = CHECK;
-    var names = ingLine(r);
-    return h("li", { class: "dish" + (on ? " on" : "") }, pick,
-      h("div", { class: "dbody" },
-        h("div", { class: "dishhead" }, h("span", { class: "dname" }, r.name), h("span", { class: "lead" }), h("span", { class: "dcount" }, ings.length + (ings.length === 1 ? " Zutat" : " Zutaten") + (nExtra ? " + " + nExtra + " Extra" + (nExtra === 1 ? "" : "s") : ""))),
-        (effortText(r.effort)) ? h("div", { class: "dmeta" },
-          effortText(r.effort) ? h("span", { title: "Aufwand: " + EFFORT_NAMES[Math.round(Number(r.effort))], "aria-label": "Aufwand " + Math.round(Number(r.effort)) + " von 5, " + EFFORT_NAMES[Math.round(Number(r.effort))] }, "Aufwand " + effortText(r.effort)) : null) : null,
-        clockEl(r.minutes),
-        h("p", { class: "dings" }, names || "Noch keine Zutaten eingetragen."),
-        h("button", { class: "linkbtn dedit", type: "button", onclick: function () { openEditor(r); } }, "Bearbeiten")));
+    var title = h("button", { class: "dname dtitle", type: "button", "aria-expanded": String(isOpen), onclick: function () { if (openDish[r.id]) delete openDish[r.id]; else openDish[r.id] = true; renderCook(); } }, r.name);
+    var body = h("div", { class: "dbody" },
+      h("div", { class: "dishhead" }, title, labelsEl(r)),
+      boltEl(r.effort), clockEl(r.minutes));
+    if (isOpen) {
+      body.append(
+        h("div", { class: "dcount" }, ings.length + (ings.length === 1 ? " Zutat" : " Zutaten") + (nExtra ? " + " + nExtra + " Extra" + (nExtra === 1 ? "" : "s") : "")),
+        h("p", { class: "dings" }, ingLine(r) || "Noch keine Zutaten eingetragen."),
+        h("button", { class: "linkbtn dedit", type: "button", onclick: function () { openEditor(r); } }, "Bearbeiten"));
+    }
+    return h("li", { class: "dish" + (on ? " on" : "") }, pick, body);
   }
   /* Essensplan: pro Tag Mittag- und Abendessen, jeweils Gerichte oder "Auswärts".
      Ältere Einträge (nur "dishes") gelten als Abendessen. */
@@ -965,7 +990,7 @@
     };
   }
   var SLOTS = ["lunch", "dinner"];
-  var KIND_NAMES = { out: "Auswärts", snack: "Snack", prep: "Mealprep" };
+  var MARK_NAMES = { out: "Auswärts", snack: "Snack", prep: "Mealprep" };
   function kindOk(k) { return k === "snack" || k === "prep" ? k : "out"; }
   function capOf(slot) { return slot.charAt(0).toUpperCase() + slot.slice(1); }
   function allDishes(doc) { var st = slotsOf(doc); return st.lunch.concat(st.dinner); }
@@ -1034,12 +1059,14 @@
     var box = $("cookmain");
     box.replaceChildren();
     if (recipes === null) { $("cookhead").textContent = "Kochbuch wird geladen …"; $("pickbar").hidden = true; return; }
-    var statsOn = cookTab === "stats";
+    var statsOn = cookTab === "stats", labelsOn = cookTab === "labels";
     $("cookstats").hidden = !statsOn;
-    $("cookheadrow").hidden = statsOn;
-    box.hidden = statsOn;
+    $("cooklabels").hidden = !labelsOn;
+    $("cookheadrow").hidden = statsOn || labelsOn;
+    box.hidden = statsOn || labelsOn;
     Array.prototype.forEach.call($("cookseg").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === cookTab)); });
     if (statsOn) { $("pickbar").hidden = true; renderCookStats(); return; }
+    if (labelsOn) { $("pickbar").hidden = true; renderLabels(); return; }
     Object.keys(picked).forEach(function (id) { if (!recipes.some(function (r) { return r.id === id; })) delete picked[id]; });
     $("cookhead").textContent = recipes.length ? "Speisekarte" : "Noch keine Gerichte";
     if (dbMissing) {
@@ -1054,17 +1081,18 @@
       box.append(h("div", { class: "empty" }, h("b", null, "Eure Speisekarte ist noch leer"), h("span", null, "Tippe oben auf „+ Gericht“ und trag ein Gericht mit seinen Zutaten ein. Jede Zutat bekommt den Laden, in dem ihr sie kauft.")));
     } else {
       var anyTime = recipes.some(function (r) { return timeCat(r.minutes) > 0; });
-      var tf = Object.keys(cookTimeF).filter(function (k) { return cookTimeF[k]; }).map(Number);
-      if (anyTime) {
-        var fr = h("div", { class: "bought xchips timefilter" }, h("span", { class: "hint" }, "Zeit:"));
-        TIME_CATS.forEach(function (tc, i) {
-          var on = !!cookTimeF[i + 1];
-          fr.append(h("button", { class: "bchip" + (on ? " sel" : ""), type: "button", "aria-pressed": String(on), onclick: function () { cookTimeF[i + 1] = !on; renderCook(); } }, tc.short));
-        });
+      var anyEff = recipes.some(function (r) { return Number(r.effort) >= 1; });
+      if (anyTime || anyEff) {
+        var fr = h("div", { class: "filters" });
+        if (anyTime) fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Zeit"), scaleInput("🕐", cookTm, "Zeit höchstens", function (n) { cookTm = n; renderCook(); }), h("span", { class: "hint" }, cookTm ? "bis " + TIME_CATS[cookTm - 1].short : "egal")));
+        if (anyEff) fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"), scaleInput("⚡", cookEm, "Aufwand höchstens", function (n) { cookEm = n; renderCook(); }), h("span", { class: "hint" }, cookEm ? "höchstens " + EFFORT_NAMES[cookEm] : "egal")));
         box.append(fr);
       }
-      var list = recipes.filter(function (r) { return !tf.length || tf.indexOf(timeCat(r.minutes)) >= 0; });
-      if (!list.length) box.append(h("div", { class: "empty" }, h("b", null, "Kein Gericht in dieser Zeit"), h("span", null, "Wähle eine andere Zeit oder tippe die Auswahl wieder ab.")));
+      var list = recipes.filter(function (r) {
+        var c = timeCat(r.minutes), e = Math.round(Number(r.effort)) || 0;
+        return (!cookTm || (c >= 1 && c <= cookTm)) && (!cookEm || (e >= 1 && e <= cookEm));
+      });
+      if (!list.length) box.append(h("div", { class: "empty" }, h("b", null, "Kein Gericht passt"), h("span", null, "Lockere die Auswahl bei Zeit oder Aufwand, oder tippe die Symbole wieder ab.")));
       var ul = h("ul", { class: "dishes" });
       list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "de"); }).forEach(function (r) { ul.append(dishEl(r)); });
       box.append(ul);
@@ -1072,6 +1100,55 @@
     var n = Object.keys(picked).length;
     $("pickbar").hidden = n === 0;
     $("pickcount").textContent = n === 1 ? "1 Gericht gewählt" : n + " Gerichte gewählt";
+  }
+  /* Labels: Emoji-Kennzeichen für Gerichte, gespeichert als besonderer Eintrag im Essensplan */
+  var LABEL_IDEAS = [["🍔", "Fast Food"], ["🥗", "Healthy"], ["🌱", "Vegetarisch"], ["🥩", "Fleisch"], ["🐟", "Fisch"], ["🍝", "Pasta"], ["🍰", "Süß"], ["🌶️", "Scharf"], ["💰", "Günstig"], ["🎉", "Für Gäste"]];
+  function saveLabels(list) {
+    if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return Promise.resolve(); }
+    labelDefs = list; renderCook();
+    return db.doc("plan/_labels").set({ list: list, at: Date.now() }).catch(writeFail);
+  }
+  function renderLabels() {
+    var box = $("cooklabels");
+    box.replaceChildren();
+    var panel = h("div", { class: "panel" }, h("h2", null, "Labels"),
+      h("p", { class: "hint" }, "Ein Label ist ein Emoji, das neben dem Gericht steht, zum Beispiel 🍔 für Fast Food. Welche Labels ein Gericht hat, stellst du beim Bearbeiten des Gerichts ein."));
+    if (!labelDefs.length) panel.append(h("p", { class: "noneyet" }, "Noch keine Labels. Tippe unten auf einen Vorschlag oder lege ein eigenes an."));
+    labelDefs.forEach(function (l) {
+      var nameIn = h("input", { type: "text", maxlength: "30", value: l.name, "aria-label": "Name des Labels " + l.emoji,
+        onchange: function (e) { var v = e.target.value.trim(); if (!v) { e.target.value = l.name; return; } saveLabels(labelDefs.map(function (x) { return x.id === l.id ? { id: x.id, emoji: x.emoji, name: v } : x; })); } });
+      var used = (recipes || []).filter(function (r) { return Array.isArray(r.labels) && r.labels.indexOf(l.id) >= 0; });
+      var del = confirmLabelDel === l.id
+        ? h("div", { class: "row" },
+            h("button", { class: "linkbtn danger", type: "button", onclick: function () {
+              confirmLabelDel = null;
+              used.forEach(function (r) { db.doc("recipes/" + r.id).update({ labels: r.labels.filter(function (x) { return x !== l.id; }) }).catch(writeFail); });
+              saveLabels(labelDefs.filter(function (x) { return x.id !== l.id; }));
+            } }, "Ja, löschen" + (used.length ? " (bei " + used.length + (used.length === 1 ? " Gericht" : " Gerichten") + " entfernen)" : "")),
+            h("button", { class: "linkbtn", type: "button", onclick: function () { confirmLabelDel = null; renderLabels(); } }, "Abbrechen"))
+        : h("button", { class: "x", type: "button", "aria-label": "Label " + l.name + " löschen", onclick: function () { confirmLabelDel = l.id; renderLabels(); } }, "×");
+      panel.append(h("div", { class: "labelrow" }, h("span", { class: "lemoji", "aria-hidden": "true" }, l.emoji), nameIn, del));
+    });
+    box.append(panel);
+    if (labelDefs.length >= 20) { box.append(h("div", { class: "panel" }, h("p", { class: "hint" }, "Mehr als 20 Labels sind nicht möglich."))); return; }
+    var emo = h("input", { type: "text", class: "emoin", maxlength: "8", value: newLabel.emoji, placeholder: "😀", "aria-label": "Emoji für das neue Label", oninput: function (e) { newLabel.emoji = e.target.value; } });
+    var nm = h("input", { type: "text", maxlength: "30", value: newLabel.name, placeholder: "Name, z. B. Fast Food", "aria-label": "Name des neuen Labels", oninput: function (e) { newLabel.name = e.target.value; } });
+    var add = function () {
+      var em = newLabel.emoji.trim(), n = newLabel.name.trim();
+      if (!em || !n) { toast("Ein Label braucht ein Emoji und einen Namen."); return; }
+      if (labelDefs.some(function (l) { return l.emoji === em; })) { toast("Dieses Emoji ist schon vergeben."); return; }
+      newLabel = { emoji: "", name: "" };
+      saveLabels(labelDefs.concat([{ id: "l" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), emoji: em.slice(0, 8), name: n.slice(0, 30) }]));
+    };
+    nm.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } });
+    var ideas = h("div", { class: "bought xchips" });
+    LABEL_IDEAS.filter(function (x) { return !labelDefs.some(function (l) { return l.emoji === x[0]; }); }).forEach(function (x) {
+      ideas.append(h("button", { class: "bchip", type: "button", onclick: function () { newLabel = { emoji: x[0], name: x[1] }; renderLabels(); } }, x[0] + " " + x[1]));
+    });
+    box.append(h("div", { class: "panel" }, h("h2", null, "Neues Label"),
+      h("div", { class: "labelrow" }, emo, nm),
+      h("div", { class: "row" }, h("button", { class: "primary", type: "button", onclick: add }, "Label anlegen")),
+      ideas.children.length ? h("span", { class: "hint" }, "Vorschläge zum Antippen:") : null, ideas.children.length ? ideas : null));
   }
   function removeCookExamples() {
     confirmCookEx = false;
@@ -1184,9 +1261,9 @@
   function openEditor(r) {
     confirmRecDel = false;
     if (r) {
-      draft = { id: r.id, name: r.name || "", at: r.at || 0, effort: Math.round(Number(r.effort)) || 0, minutes: Math.round(Number(r.minutes)) || 0, ings: (r.ingredients || []).map(function (g) { return { name: g.name || "", store: resolveStore(g.store), touched: true, k: kindOf(g) }; }) };
+      draft = { id: r.id, labels: Array.isArray(r.labels) ? r.labels.slice() : [], name: r.name || "", at: r.at || 0, effort: Math.round(Number(r.effort)) || 0, minutes: Math.round(Number(r.minutes)) || 0, ings: (r.ingredients || []).map(function (g) { return { name: g.name || "", store: resolveStore(g.store), touched: true, k: kindOf(g) }; }) };
     } else {
-      draft = { id: null, name: "", at: 0, effort: 0, minutes: 0, ings: [] };
+      draft = { id: null, labels: [], name: "", at: 0, effort: 0, minutes: 0, ings: [] };
     }
     if (!draft.ings.length) draft.ings.push({ name: "", store: resolveStore(curStore), touched: false });
     setCookMode("edit");
@@ -1205,20 +1282,23 @@
     box.replaceChildren();
     var storeList = sortedStores();
     var nameIn = h("input", { id: "recname", type: "text", maxlength: "80", placeholder: "z. B. Spaghetti Bolognese", "aria-label": "Name des Gerichts", value: draft.name, oninput: function (e) { draft.name = e.target.value; } });
-    var effSel = h("select", { "aria-label": "Aufwand", onchange: function (e) { draft.effort = Number(e.target.value) || 0; } },
-      h("option", { value: "0" }, "keine Angabe"));
-    for (var ei = 1; ei <= 5; ei++) effSel.append(h("option", { value: String(ei), selected: draft.effort === ei }, ei + " von 5 · " + EFFORT_NAMES[ei]));
-    var minIn = h("select", { "aria-label": "Zubereitungszeit", onchange: function (e) {
-      var c = Number(e.target.value);
-      if (c === 0) draft.minutes = 0;
-      else if (timeCat(draft.minutes) !== c) draft.minutes = TIME_CATS[c - 1].rep;
-    } }, h("option", { value: "0" }, "keine Angabe"));
-    TIME_CATS.forEach(function (tc, i) { minIn.append(h("option", { value: String(i + 1), selected: timeCat(draft.minutes) === i + 1 }, tc.label)); });
-    var panel = h("div", { class: "panel" }, h("h2", null, draft.id ? "Gericht bearbeiten" : "Neues Gericht"), nameIn,
-      h("div", { class: "two" },
-        h("label", { class: "fl" }, "Aufwand", effSel),
-        h("label", { class: "fl" }, "Zubereitungszeit", minIn)),
-      h("h2", null, "Zutaten und Laden"));
+    var tc0 = timeCat(draft.minutes);
+    var effIn = h("div", { class: "fl" }, h("span", null, "Aufwand"),
+      h("div", { class: "scrow" }, scaleInput("⚡", draft.effort, "Aufwand", function (n) { draft.effort = n; renderEditor(); }), h("span", { class: "hint" }, draft.effort ? EFFORT_NAMES[draft.effort] : "keine Angabe")));
+    var timeIn = h("div", { class: "fl" }, h("span", null, "Zubereitungszeit"),
+      h("div", { class: "scrow" }, scaleInput("🕐", tc0, "Zeit", function (n) { draft.minutes = n ? TIME_CATS[n - 1].rep : 0; renderEditor(); }), h("span", { class: "hint" }, tc0 ? TIME_CATS[tc0 - 1].label : "keine Angabe")));
+    var panel = h("div", { class: "panel" }, h("h2", null, draft.id ? "Gericht bearbeiten" : "Neues Gericht"), nameIn, effIn, timeIn);
+    if (labelDefs.length) {
+      var lc = h("div", { class: "bought xchips" });
+      labelDefs.forEach(function (l) {
+        var on = draft.labels.indexOf(l.id) >= 0;
+        lc.append(h("button", { class: "bchip" + (on ? " sel" : ""), type: "button", "aria-pressed": String(on), onclick: function () {
+          draft.labels = on ? draft.labels.filter(function (x) { return x !== l.id; }) : draft.labels.concat([l.id]); renderEditor();
+        } }, l.emoji + " " + l.name));
+      });
+      panel.append(h("div", { class: "fl" }, h("span", null, "Labels"), lc));
+    } else panel.append(h("p", { class: "hint" }, "Tipp: Unter „Labels“ im Kochbuch kannst du Emoji-Labels wie 🍔 oder 🥗 anlegen."));
+    panel.append(h("h2", null, "Zutaten und Laden"));
     draft.ings.forEach(function (g, idx) {
       var sel = h("select", { "aria-label": "Laden für Zutat " + (idx + 1), onchange: function (e) { g.store = e.target.value; g.touched = true; } });
       storeList.forEach(function (s) { sel.append(h("option", { value: s.id, selected: s.id === g.store }, s.name)); });
@@ -1264,8 +1344,9 @@
     var mins = Math.round(Number(draft.minutes)) || 0;
     if (mins < 0 || mins > 1440) { toast("Die Dauer sollte zwischen 1 und 1440 Minuten liegen."); return; }
     var eff = Math.round(Number(draft.effort)) || 0;
-    if (draft.id) p = db.doc("recipes/" + draft.id).update({ name: name, ingredients: ings, example: false, effort: eff, minutes: mins });
-    else p = db.collection("recipes").add({ name: name, ingredients: ings, at: Date.now(), effort: eff, minutes: mins });
+    var lbl = (draft.labels || []).filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
+    if (draft.id) p = db.doc("recipes/" + draft.id).update({ name: name, ingredients: ings, example: false, effort: eff, minutes: mins, labels: lbl });
+    else p = db.collection("recipes").add({ name: name, ingredients: ings, at: Date.now(), effort: eff, minutes: mins, labels: lbl });
     p.then(function () { setCookMode("list"); renderCook(); toast("„" + name + "“ ist gespeichert."); }).catch(writeFail);
   }
   function deleteRecipe() {
@@ -1291,11 +1372,13 @@
     var st = slotsOf(plan[ds]);
     var dishes = st[slot], out = st["out" + Cap];
     var key = ds + "|" + slot;
-    var box = h("div", { class: "slot" }, h("div", { class: "slabel" }, SLOT_NAMES[slot], dishes.length && st["listed" + Cap] ? h("span", { class: "listed", title: "Zutaten sind auf den Einkaufslisten" }, " ✓ Zutaten geprüft") : null));
+    var menuOpen = !!pickDay && String(pickDay).indexOf(key + "|") === 0;
+    var box = h("div", { class: "slot" }, h("div", { class: "slabel" },
+      h("button", { class: "slotbtn", type: "button", "aria-expanded": String(menuOpen), onclick: function () { pickDay = menuOpen ? null : key + "|menu"; renderMeal(); } }, SLOT_NAMES[slot], h("span", { class: "chev", "aria-hidden": "true" }, menuOpen ? "▾" : "▸")), dishes.length && st["listed" + Cap] ? h("span", { class: "listed", title: "Zutaten sind auf den Einkaufslisten" }, " ✓ Zutaten geprüft") : null));
     var chips = h("div", { class: "mealchips" });
     if (out) {
       var note = st["note" + Cap];
-      var kn = KIND_NAMES[st["kind" + Cap]] || "Auswärts";
+      var kn = MARK_NAMES[st["kind" + Cap]] || "Auswärts";
       chips.append(h("span", { class: "meal out" }, kn + (note ? ": " + note : ""),
         h("button", { class: "x", type: "button", "aria-label": SLOT_NAMES[slot] + ": " + kn + " entfernen", onclick: function () {
           var cur = slotsOf(plan[ds]); cur["out" + Cap] = false; cur["note" + Cap] = ""; saveDay(ds, cur);
@@ -1336,7 +1419,7 @@
     var mk = ["out", "snack", "prep"].filter(function (k) { return pickDay === key + "|" + k; })[0];
     if (mk) {
       var ph = { out: "Wo? z. B. bei Oma (kann leer bleiben)", snack: "Was? z. B. Obst (kann leer bleiben)", prep: "Was wird vorbereitet? (kann leer bleiben)" }[mk];
-      var inp = h("input", { type: "text", maxlength: "60", placeholder: ph, "aria-label": "Notiz zu " + KIND_NAMES[mk] });
+      var inp = h("input", { type: "text", maxlength: "60", placeholder: ph, "aria-label": "Notiz zu " + MARK_NAMES[mk] });
       var go = function () {
         var cur = slotsOf(plan[ds]);
         cur[slot] = []; cur["out" + Cap] = true; cur["kind" + Cap] = mk; cur["note" + Cap] = inp.value.trim(); cur["listed" + Cap] = false;
@@ -1350,12 +1433,12 @@
     var acts = h("div", { class: "slotact" });
     var open1 = pickDay === key + "|dish", open3 = pickDay === key + "|dice";
     acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open1 ? null : key + "|dish"; renderMeal(); } }, open1 ? "Schließen" : "+ Gericht"));
-    acts.append(h("button", { class: "linkbtn", type: "button", "aria-label": SLOT_NAMES[slot] + " auswürfeln", onclick: function () { pickDay = open3 ? null : key + "|dice"; renderMeal(); } }, open3 ? "Würfel schließen" : "🎲 Würfeln"));
+    acts.append(h("button", { class: "linkbtn", type: "button", "aria-label": SLOT_NAMES[slot] + " auswürfeln", onclick: function () { pickDay = open3 ? null : key + "|dice"; renderMeal(); } }, open3 ? "Schließen" : "🎲"));
     if (!out) ["out", "snack", "prep"].forEach(function (k) {
       var o = pickDay === key + "|" + k;
-      acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = o ? null : key + "|" + k; renderMeal(); } }, o ? "Schließen" : KIND_NAMES[k]));
+      acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = o ? null : key + "|" + k; renderMeal(); } }, o ? "Schließen" : MARK_NAMES[k]));
     });
-    box.append(acts);
+    if (menuOpen) box.append(acts);
     return box;
   }
   /* Essensplan: Würfel */
@@ -1364,13 +1447,15 @@
     if (!diceState[key]) {
       var saved = {};
       try { saved = JSON.parse(lsGet("pp-dice-" + slot) || "{}") || {}; } catch (e) {}
-      diceState[key] = { t: Array.isArray(saved.t) ? saved.t.map(Number).filter(function (x) { return x >= 1 && x <= TIME_CATS.length; }) : [], e: Number(saved.e) || 0, cur: null, seen: [] };
+      var tm = Number(saved.tm) || 0;
+      if (!tm && Array.isArray(saved.t) && saved.t.length) tm = Math.max.apply(null, saved.t.map(Number));
+      diceState[key] = { tm: tm >= 1 && tm <= TIME_CATS.length ? tm : 0, e: Math.min(5, Math.max(0, Number(saved.e) || 0)), cur: null, seen: [] };
     }
     return diceState[key];
   }
   function dicePool(d, plannedWeek) {
     var all = (recipes || []).filter(function (r) {
-      if (d.t.length && d.t.indexOf(timeCat(r.minutes)) < 0) return false;
+      if (d.tm && !(timeCat(r.minutes) >= 1 && timeCat(r.minutes) <= d.tm)) return false;
       if (d.e && !(Number(r.effort) >= 1 && Number(r.effort) <= d.e)) return false;
       return true;
     });
@@ -1392,36 +1477,28 @@
   function diceEl(ds, slot, key) {
     var Cap = capOf(slot);
     var d = diceInit(key, slot);
-    var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ t: d.t, e: d.e })); d.cur = null; d.seen = []; renderMeal(); };
-    var tSel = h("div", { class: "bought xchips timefilter", role: "group", "aria-label": "Wie schnell soll es gehen?" });
-    TIME_CATS.forEach(function (tc, i) {
-      var on = d.t.indexOf(i + 1) >= 0;
-      tSel.append(h("button", { class: "bchip" + (on ? " sel" : ""), type: "button", "aria-pressed": String(on), onclick: function () {
-        if (on) d.t = d.t.filter(function (x) { return x !== i + 1; }); else d.t = d.t.concat([i + 1]);
-        save();
-      } }, tc.short));
-    });
-    var eSel = h("select", { "aria-label": "Wie viel Aufwand höchstens?", onchange: function (e) { d.e = Number(e.target.value); save(); } },
-      h("option", { value: "0", selected: d.e === 0 }, "egal"));
-    for (var i = 1; i <= 4; i++) eSel.append(h("option", { value: String(i), selected: d.e === i }, "höchstens " + i + " · " + EFFORT_NAMES[i]));
+    var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ tm: d.tm, e: d.e })); d.cur = null; d.seen = []; renderMeal(); };
+    var tSel = h("div", { class: "scrow" }, h("span", { class: "zl" }, "Schnell"),
+      scaleInput("🕐", d.tm, "Zeit höchstens", function (n) { d.tm = n; save(); }),
+      h("span", { class: "hint" }, d.tm ? "bis " + TIME_CATS[d.tm - 1].short : "egal"));
+    var eSel = h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"),
+      scaleInput("⚡", d.e, "Aufwand höchstens", function (n) { d.e = n; save(); }),
+      h("span", { class: "hint" }, d.e ? "höchstens " + EFFORT_NAMES[d.e] : "egal"));
     var week = {};
     var mon = weekStart(dn(ds));
     for (var j = 0; j < 7; j++) allDishes(plan[dnToStr(mon + j)]).forEach(function (x) { week[x.id] = true; });
     var info = dicePool(d, week), cur = (recipes || []).filter(function (r) { return r.id === d.cur; })[0];
-    var unknown = (d.t.length || d.e) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
+    var unknown = (d.tm || d.e) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
     var box = h("div", { class: "dice" },
-      h("div", { class: "fl" }, h("span", null, "Wie schnell? (keine Auswahl = egal)"), tSel),
-      h("label", { class: "fl" }, "Wie viel Aufwand?", eSel));
+      tSel, eSel);
     if (!info.all.length) {
-      box.append(h("p", { class: "noneyet" }, (d.t.length || d.e) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand und Dauer oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
+      box.append(h("p", { class: "noneyet" }, (d.tm || d.e) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand und Dauer oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
     } else {
       if (cur) {
         var taken = slotsOf(plan[ds])[slot].some(function (x) { return x.id === cur.id; });
         box.append(h("div", { class: "dicecard" },
-          h("div", { class: "dname" }, cur.name),
-          (effortText(cur.effort) || timeLabel(cur.minutes)) ? h("div", { class: "dmeta" },
-            timeLabel(cur.minutes) ? h("span", null, "⏱ " + timeLabel(cur.minutes)) : null,
-            effortText(cur.effort) ? h("span", null, "Aufwand " + effortText(cur.effort)) : null) : null,
+          h("div", { class: "dname" }, cur.name, labelsEl(cur)),
+          boltEl(cur.effort), clockEl(cur.minutes),
           h("p", { class: "dings" }, ingLine(cur) || "Keine Zutaten eingetragen.")));
       }
       box.append(h("div", { class: "row" },
@@ -1430,7 +1507,7 @@
           c2[slot] = c2[slot].concat([{ id: cur.id, name: cur.name }]); c2["out" + Cap] = false; c2["note" + Cap] = ""; c2["listed" + Cap] = false;
           pickDay = null; saveDay(ds, c2); renderMeal();
         } }, "Nehmen") : null,
-        h("button", { class: cur ? "linkbtn" : "primary", type: "button", onclick: function () { diceRoll(ds, slot, key); renderMeal(); } }, cur ? "🎲 Nochmal würfeln" : "🎲 Würfeln")));
+        h("button", { class: cur ? "linkbtn" : "primary", type: "button", "aria-label": cur ? "Nochmal würfeln" : "Würfeln", onclick: function () { diceRoll(ds, slot, key); renderMeal(); } }, "🎲")));
       box.append(h("p", { class: "foot" }, info.all.length + (info.all.length === 1 ? " Gericht passt" : " Gerichte passen") + (info.fresh.length < info.all.length ? "" : "") + "." + (unknown ? " " + unknown + " ohne Angaben zu Aufwand und Dauer werden bei einem Filter nicht vorgeschlagen." : "")));
     }
     return box;
@@ -1972,7 +2049,7 @@
     if (planLoaded && recipes !== null) {
       var st = slotsOf(plan[ts]);
       var line = function (name, dishes, out, note, kind) {
-        var txt = out ? (KIND_NAMES[kind] || "Auswärts") + (note ? ": " + note : "") : dishes.length ? dishes.map(function (d) { var r = recipes.filter(function (x) { return x.id === d.id; })[0]; return r ? r.name : d.name; }).join(", ") : "noch nichts geplant";
+        var txt = out ? (MARK_NAMES[kind] || "Auswärts") + (note ? ": " + note : "") : dishes.length ? dishes.map(function (d) { var r = recipes.filter(function (x) { return x.id === d.id; })[0]; return r ? r.name : d.name; }).join(", ") : "noch nichts geplant";
         return h("div", { class: "mline" }, h("span", { class: "slabel" }, name), h("span", { class: dishes.length || out ? "mt" : "mt none" }, txt));
       };
       box.append(homeCard("Essen heute", "meal", [line("Mittagessen", st.lunch, st.outLunch, st.noteLunch, st.kindLunch), line("Abendessen", st.dinner, st.outDinner, st.noteDinner, st.kindDinner)], "Essensplan"));
@@ -2876,9 +2953,11 @@
     listen("plan", function (a) {
       var m = {};
       a.forEach(function (d) { m[d.id] = d; });
+      var ld = m._labels; delete m._labels;
+      labelDefs = ld && Array.isArray(ld.list) ? ld.list.filter(function (l) { return l && typeof l.id === "string" && typeof l.emoji === "string" && typeof l.name === "string"; }) : [];
       plan = m; planLoaded = true;
       renderCookStats(); renderMeal();
-      if (cookTab === "stats") renderCook();
+      renderCook();
     });
     listen("budgets", function (a) {
       budgets = a;
