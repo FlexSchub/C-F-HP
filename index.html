@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
-<link rel="stylesheet" href="css/app.css?v=20">
+<link rel="stylesheet" href="css/app.css?v=21">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -62,8 +62,58 @@
       <button class="tab" type="button" id="tabmeal">Essensplan</button>
       <button class="tab" type="button" id="tabcal">Kalender</button>
       <button class="tab" type="button" id="tabspend">Ausgaben</button>
+      <button class="tab" type="button" id="tabbus">Bus-Rennen</button>
     </nav>
   </header>
+
+  <section class="col" id="busview" hidden>
+    <p class="headline" id="busloading">Bus-Rennen wird geladen …</p>
+    <div class="col" id="busmain" hidden>
+      <div class="seg viewseg" id="bustabs" role="group" aria-label="Ansicht Bus-Rennen">
+        <button type="button" data-v="race" aria-pressed="true">Rennen</button>
+        <button type="button" data-v="stats" aria-pressed="false">Statistik</button>
+      </div>
+      <div class="col" id="busracev">
+        <div class="toolbar" id="busmerow">
+          <div class="seg-group">
+            <span class="seg-label" id="busmelabel">Ich bin</span>
+            <div class="seg" id="busme" role="group" aria-labelledby="busmelabel">
+              <button type="button" class="pf" data-v="F" aria-pressed="false">F</button>
+              <button type="button" class="pc" data-v="C" aria-pressed="false">C</button>
+            </div>
+          </div>
+        </div>
+        <div class="bzbanner" id="buswin" role="status"></div>
+        <div class="panel">
+          <h2>Heute</h2>
+          <div id="buslanes" style="display:flex;flex-direction:column;gap:14px"></div>
+          <div class="bzguest">
+            <input id="busguestname" type="text" maxlength="20" placeholder="Gast für heute, z. B. Oma" aria-label="Name des Gastes">
+            <button class="linkbtn" type="button" id="busguestadd">+ Gast mitspielen lassen</button>
+          </div>
+          <div><button class="linkbtn" type="button" id="busundo">↶ Letzten Eintrag zurücknehmen</button></div>
+        </div>
+        <div class="panel"><h2>Heute eingetragen</h2><ul class="bzlog" id="buslog"></ul></div>
+        <div class="panel">
+          <h2>Regeln</h2>
+          <p class="hint">Wer zuerst einen Bus sieht und laut „Bus" sagt: +1 Feld. KölleBus (Bus mit Blumenlogo): +2 Felder. Kein Bus (verguckt): Der Bus bekommt einen Platten und steht, bis dieser Spieler 10 richtige Punkte gesammelt hat. Wer zuerst 10 Felder schafft, gewinnt den Tag. Um Mitternacht beginnt alles neu. Jeder darf für jeden eintragen. Gäste spielen nur für den einen Tag mit.</p>
+        </div>
+      </div>
+      <div class="col" id="busstatsv" hidden>
+        <div class="toolbar">
+          <div class="seg-group">
+            <span class="seg-label" id="busplabel">Zeitraum</span>
+            <div class="seg" id="busperiod" role="group" aria-labelledby="busplabel">
+              <button type="button" data-v="7" aria-pressed="false">7 Tage</button>
+              <button type="button" data-v="30" aria-pressed="true">30 Tage</button>
+              <button type="button" data-v="all" aria-pressed="false">Gesamt</button>
+            </div>
+          </div>
+        </div>
+        <div class="col" id="busstatsbody"></div>
+      </div>
+    </div>
+  </section>
 
   <section class="col" id="homeview" hidden>
     <p class="headline" id="homehead" aria-live="polite">Hallo!</p>
@@ -455,7 +505,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=20"></script>
-<script src="js/app.js?v=20"></script>
+<script src="js/store-supabase.js?v=21"></script>
+<script src="js/app.js?v=21"></script>
 </body>
 </html>

@@ -26,7 +26,7 @@
   var view = "plan";
   var toastTimer = null;
   var sv = lsGet("pp-section");
-  var section = sv === "shop" || sv === "cook" || sv === "meal" || sv === "cal" || sv === "spend" || sv === "putz" ? sv : "home";
+  var section = sv === "shop" || sv === "cook" || sv === "meal" || sv === "cal" || sv === "spend" || sv === "bus" || sv === "putz" ? sv : "home";
   var events = [], eventsLoaded = false;
   var calMode = lsGet("pp-calmode") === "week" ? "week" : "month";
   var calAnchor = 0, calSel = 0;      // Tage seit 1970 (werden unten gesetzt)
@@ -1910,6 +1910,7 @@
     else if (name === "cal") renderCal();
     else if (name === "spend") renderSpend();
     else if (name === "cook") renderCook();
+    else if (name === "bus") busRender();
     if (after) after();
     try { window.scrollTo(0, 0); } catch (e) {}
   }
@@ -1962,6 +1963,9 @@
       }
       box.append(homeCard("Putzplan", "putz", tb));
     }
+
+    /* Bus-Rennen */
+    if (busAll !== null) { try { box.append(busHomeCard()); } catch (e) {} }
 
     /* Essen */
     if (planLoaded && recipes !== null) {
@@ -2304,8 +2308,9 @@
     $("mealview").hidden = section !== "meal";
     $("spendview").hidden = section !== "spend";
     $("calview").hidden = section !== "cal";
+    $("busview").hidden = section !== "bus";
     $("homeview").hidden = section !== "home";
-    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["cook", "tabcook"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"]].forEach(function (p) {
+    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["cook", "tabcook"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"], ["bus", "tabbus"]].forEach(function (p) {
       var b = $(p[1]);
       if (section === p[0]) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
@@ -2328,6 +2333,7 @@
   $("tabputz").addEventListener("click", function () { section = "putz"; lsSet("pp-section", "putz"); syncControls(); });
   $("tabshop").addEventListener("click", function () { section = "shop"; lsSet("pp-section", "shop"); syncControls(); });
   $("tabcook").addEventListener("click", function () { section = "cook"; lsSet("pp-section", "cook"); syncControls(); });
+  $("tabbus").addEventListener("click", function () { goSection("bus"); });
   $("tabcal").addEventListener("click", function () { section = "cal"; lsSet("pp-section", "cal"); syncControls(); renderCal(); });
   $("calprev").addEventListener("click", function () { calStep(-1); });
   $("calnext").addEventListener("click", function () { calStep(1); });
@@ -2598,11 +2604,255 @@
   applyColors(); renderColors();
   try { if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { applyColors(); renderColors(); }); } catch (e) {}
 
+  /* ---------- Bus-Rennen ---------- */
+  var BZ_GOAL = 10, BZ_REPAIR = 10, BZ_DELTA = { bus: 1, flower: 2, wrong: -10 };
+  var BZ_NAMES = { bus: "Bus gesehen", flower: "KölleBus", wrong: "Falsch gesehen (Platten)" };
+  var BZ_COLORS = { bus: "#f2c300", flower: "#2e9e4f" };
+  var busAll = null;                 // null = lädt noch; Einträge: t "ev" (Sichtung) oder "guest" (Gast für einen Tag)
+  var busTab = lsGet("pp-bustab"); if (busTab !== "stats") busTab = "race";
+  var busPeriod = lsGet("pp-busperiod"); if (busPeriod !== "7" && busPeriod !== "all") busPeriod = "30";
+  var busLanes = {}, busShown = {}, busDay = "";
+
+  function busSvg(fill, w, flower) {
+    var win = '<rect x="4" y="5" width="7" height="6" rx="1" fill="#d6ecf8"/><rect x="13" y="5" width="7" height="6" rx="1" fill="#d6ecf8"/><rect x="22" y="5" width="7" height="6" rx="1" fill="#d6ecf8"/><path d="M31 5h5.2c1 0 1.8.8 1.8 1.8V11H31z" fill="#d6ecf8"/>';
+    var fl = flower ? '<g transform="translate(13 14.5)"><circle cx="0" cy="-2" r="1.6" fill="#fff"/><circle cx="1.9" cy="-.6" r="1.6" fill="#fff"/><circle cx="1.2" cy="1.7" r="1.6" fill="#fff"/><circle cx="-1.2" cy="1.7" r="1.6" fill="#fff"/><circle cx="-1.9" cy="-.6" r="1.6" fill="#fff"/><circle cx="0" cy="0" r="1.1" fill="#f2c300"/></g>' : '';
+    return '<svg viewBox="0 0 40 25" width="' + w + '" height="' + Math.round(w * 25 / 40) + '" aria-hidden="true" focusable="false"><rect x="1" y="2" width="38" height="17" rx="4" fill="' + fill + '"/><rect x="1" y="15" width="38" height="2" fill="rgba(0,0,0,.18)"/>' + win + fl +
+      '<circle cx="10" cy="20" r="3.6" fill="#222"/><circle cx="10" cy="20" r="1.3" fill="#999"/><circle cx="30" cy="20" r="3.6" fill="#222"/><circle cx="30" cy="20" r="1.3" fill="#999"/></svg>';
+  }
+  function busIcon(kind) { var el = h("span", { class: "bzicon", "aria-hidden": "true" }); el.innerHTML = busSvg(BZ_COLORS[kind], 30, kind === "flower"); return el; }
+
+  function bzEvents() { return (busAll || []).filter(function (d) { return d.t === "ev" && BZ_DELTA[d.kind] !== undefined && typeof d.date === "string"; }); }
+  function bzGuests() { return (busAll || []).filter(function (d) { return d.t === "guest" && typeof d.date === "string"; }); }
+  function bzDayEvents(ds) { return bzEvents().filter(function (e) { return e.date === ds; }); }
+  function bzPlayers(ds) { return ["F", "C"].concat(bzGuests().filter(function (g) { return g.date === ds; }).sort(function (a, b) { return (a.ci || 0) - (b.ci || 0) || (a.at || 0) - (b.at || 0); }).map(function (g) { return g.id; })); }
+  function bzGuest(id) { return bzGuests().filter(function (g) { return g.id === id; })[0] || null; }
+  function bzName(id) { var g = bzGuest(id); return g ? String(g.name || "Gast") : id; }
+  function bzCls(id) { var g = bzGuest(id); return g ? "G" + ((g.ci || 0) % 4) : id; }
+  function bzInit(id) { return bzName(id).charAt(0).toUpperCase(); }
+
+  /* Platten: Ein falsch gerufener Bus steht, bis 10 richtige Punkte gesammelt sind. Erst danach zählen Punkte wieder als Felder. */
+  function bzReplay(list, ids) {
+    var st = {}, winner = null;
+    ids.forEach(function (id) { st[id] = { pos: 0, debt: 0, best: 0, wrong: 0 }; });
+    list.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0) || String(a.id).localeCompare(String(b.id)); }).forEach(function (e) {
+      var p = st[e.by]; if (!p) return;
+      if (e.kind === "wrong") { p.debt += BZ_REPAIR; p.wrong++; }
+      else {
+        var d = BZ_DELTA[e.kind], used = Math.min(p.debt, d);
+        p.debt -= used; p.pos = Math.min(BZ_GOAL, p.pos + d - used);
+        if (p.pos > p.best) p.best = p.pos;
+        if (!winner && p.pos >= BZ_GOAL) winner = e.by;
+      }
+    });
+    return { st: st, winner: winner };
+  }
+
+  function busWrite(p) { return p.catch(writeFail); }
+  function busAdd(id, kind) {
+    if (!db || busAll === null) return;
+    var ts = todayStr(), ref = db.collection("bus").doc();
+    busWrite(ref.set({ t: "ev", date: ts, by: id, kind: kind, enteredBy: me || "", at: Date.now() }));
+    var l = busLanes[id];
+    if (l && (kind === "flower" || kind === "wrong")) {
+      l.tag.textContent = kind === "wrong" ? "💥" : "🌸";
+      l.tag.classList.remove("show"); void l.tag.offsetWidth; l.tag.classList.add("show");
+      if (kind === "wrong") { l.road.classList.remove("shake"); void l.road.offsetWidth; l.road.classList.add("shake"); }
+    }
+  }
+  function busUndo() {
+    var list = bzDayEvents(todayStr()).sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+    if (!list.length) return;
+    busWrite(db.doc("bus/" + list[0].id).delete());
+  }
+  function busAddGuest() {
+    var inp = $("busguestname"), n = inp.value.trim(); if (!n || !db) return;
+    var ts = todayStr(), cur = bzGuests().filter(function (g) { return g.date === ts; });
+    if (cur.length >= 4) { inp.value = ""; inp.placeholder = "Maximal 4 Gäste pro Tag"; return; }
+    var used = cur.map(function (g) { return g.ci; }), ci = 0; while (used.indexOf(ci) >= 0) ci++;
+    busWrite(db.collection("bus").doc().set({ t: "guest", date: ts, name: n.slice(0, 20), ci: ci, at: Date.now() }));
+    inp.value = "";
+  }
+  function busRemoveGuest(id) {
+    busWrite(Promise.all(bzEvents().filter(function (e) { return e.by === id; }).map(function (e) { return db.doc("bus/" + e.id).delete(); }).concat([db.doc("bus/" + id).delete()])));
+  }
+
+  /* Spieltage und Serien */
+  function bzWinners() {
+    var days = {}, out = {};
+    bzEvents().forEach(function (e) { (days[e.date] = days[e.date] || []).push(e); });
+    Object.keys(days).sort().forEach(function (ds) { out[ds] = bzReplay(days[ds], bzPlayers(ds)).winner; });
+    return out;
+  }
+  function bzStreaks(w) {
+    var res = { F: { cur: 0, best: 0 }, C: { cur: 0, best: 0 } }, keys = Object.keys(w).sort();
+    ["F", "C"].forEach(function (who) {
+      var run = 0;
+      keys.forEach(function (d) {            // nur Tage mit Sieger zählen; wirklich verloren = jemand anderes gewinnt
+        if (!w[d]) return;
+        if (w[d] === who) { run++; if (run > res[who].best) res[who].best = run; } else run = 0;
+      });
+      res[who].cur = run;
+    });
+    return res;
+  }
+
+  /* Rennbahnen */
+  function busBuildLane(id) {
+    var bus = h("div", { class: "bzbus " + bzCls(id), "aria-hidden": "true" });
+    bus.innerHTML = busSvg("currentColor", 46, false);
+    var tag = h("span", { class: "bztag", "aria-hidden": "true" }, "🌸");
+    var cells = h("div", { class: "bzcells" }); for (var i = 0; i < BZ_GOAL; i++) cells.append(h("i"));
+    var road = h("div", { class: "bzroad", role: "img" }, cells, h("div", { class: "bzfinish" }), bus, tag);
+    var score = h("span", { class: "bzscore" }), nm = bzName(id);
+    function add(kind) { return function () { busAdd(id, kind); }; }
+    var flat = h("div", { class: "bzflat", role: "status" });
+    var head = h("div", { class: "bzhead" }, h("span", { class: "bzwho " + bzCls(id) }, "Bus von " + nm), score);
+    var box = h("div", { class: "bzlane" }, head, road, flat,
+      h("div", { class: "bzbtns" },
+        h("button", { class: "ok", type: "button", onclick: add("bus"), "aria-label": nm + ": Bus gesehen, plus 1" }, busIcon("bus"), "Bus", h("small", null, "+1 Feld")),
+        h("button", { class: "ok", type: "button", onclick: add("flower"), "aria-label": nm + ": KölleBus gesehen, plus 2" }, busIcon("flower"), "KölleBus", h("small", null, "+2 Felder")),
+        h("button", { class: "no", type: "button", onclick: add("wrong"), "aria-label": nm + ": Falsch gesehen, Platten, minus 10" }, "❌ Falsch", h("small", null, "Platten (−10)"))));
+    if (bzGuest(id)) head.append(h("button", { class: "linkbtn bzremove", type: "button", onclick: function () { busRemoveGuest(id); } }, "Gast entfernen"));
+    busLanes[id] = { box: box, bus: bus, tag: tag, road: road, score: score, flat: flat };
+    busShown[id] = 0;
+    return box;
+  }
+  function busPlace(id, pos, back) {
+    var l = busLanes[id], w = l.road.clientWidth, trackW = w - 44, busW = 46;
+    var left = pos / BZ_GOAL * (trackW - busW) + 2;
+    if (pos >= BZ_GOAL) left = w - busW - 4;
+    l.bus.classList.toggle("back", !!back);
+    l.bus.style.left = Math.max(2, left) + "px";
+    l.tag.style.left = Math.max(2, left + 12) + "px";
+  }
+  function busRenderRace() {
+    var ts = todayStr(), ids = bzPlayers(ts), host = $("buslanes");
+    if (busDay !== ts) { Object.keys(busLanes).forEach(function (id) { busLanes[id].box.remove(); delete busLanes[id]; delete busShown[id]; }); busDay = ts; }
+    Object.keys(busLanes).forEach(function (id) { if (ids.indexOf(id) < 0) { busLanes[id].box.remove(); delete busLanes[id]; delete busShown[id]; } });
+    ids.forEach(function (id) { if (!busLanes[id]) host.append(busBuildLane(id)); });
+    var list = bzDayEvents(ts), r = bzReplay(list, ids);
+    ids.forEach(function (id) {
+      var l = busLanes[id], p = r.st[id];
+      l.score.textContent = p.pos + " von " + BZ_GOAL + " Feldern";
+      l.road.setAttribute("aria-label", bzName(id) + " steht auf Feld " + p.pos + " von " + BZ_GOAL + (p.debt ? ", Platten" : ""));
+      busPlace(id, p.pos, p.pos < busShown[id]); busShown[id] = p.pos;
+      l.bus.classList.toggle("isflat", p.debt > 0);
+      l.flat.classList.toggle("show", p.debt > 0);
+      l.flat.replaceChildren();
+      if (p.debt > 0) {
+        var blocks = Math.ceil(p.debt / BZ_REPAIR), earned = blocks * BZ_REPAIR - p.debt, dots = h("span", { class: "bzdots", "aria-hidden": "true" });
+        for (var i = 0; i < BZ_REPAIR; i++) dots.append(h("i", { class: i < earned ? "on" : "" }));
+        l.flat.append("🔧 Platten! Noch " + p.debt + " richtige Punkte" + (blocks > 1 ? " (" + blocks + " Platten)" : "") + ", dann fährt der Bus weiter.", dots);
+      }
+    });
+    var wb = $("buswin");
+    wb.className = "bzbanner" + (r.winner ? " show " + bzCls(r.winner) : "");
+    wb.textContent = r.winner ? "🏁 " + bzName(r.winner) + " gewinnt den Tag! Gezählt wird trotzdem weiter." : "";
+    var ul = $("buslog"); ul.replaceChildren();
+    list.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+    if (!list.length) ul.append(h("li", null, h("span", { class: "hint" }, "Heute wurde noch kein Bus gesehen.")));
+    list.slice(0, 40).forEach(function (e) {
+      var d = new Date(e.at || 0);
+      ul.append(h("li", null, h("span", { class: "bzchip " + bzCls(e.by), title: bzName(e.by) }, bzInit(e.by)),
+        h("span", { class: "bzev" }, e.kind === "wrong" ? "❌" : busIcon(e.kind), " " + BZ_NAMES[e.kind], e.enteredBy && e.enteredBy !== e.by ? h("span", { class: "hint" }, "  · eingetragen von " + e.enteredBy) : null),
+        h("span", { class: "bzpts " + (BZ_DELTA[e.kind] > 0 ? "plus" : "minus") }, BZ_DELTA[e.kind] > 0 ? "+" + BZ_DELTA[e.kind] : "Platten"),
+        h("span", { class: "bztime" }, pad(d.getHours()) + ":" + pad(d.getMinutes()))));
+    });
+    $("busundo").disabled = !list.length;
+  }
+
+  /* Statistik */
+  function busRenderStats() {
+    var ts = todayStr(), from = busPeriod === "all" ? "0000-00-00" : dnToStr(dn(ts) - (Number(busPeriod) - 1));
+    var days = {};
+    bzEvents().forEach(function (e) { if (e.date >= from && e.date <= ts) (days[e.date] = days[e.date] || []).push(e); });
+    var S = { F: { bus: 0, flower: 0, wrong: 0, wins: 0, best: 0 }, C: { bus: 0, flower: 0, wrong: 0, wins: 0, best: 0 } }, guestWins = 0, winners = [];
+    Object.keys(days).sort().forEach(function (ds) {
+      var r = bzReplay(days[ds], bzPlayers(ds));
+      days[ds].forEach(function (e) { if (S[e.by]) S[e.by][e.kind]++; });
+      ["F", "C"].forEach(function (w) { if (r.st[w].best > S[w].best) S[w].best = r.st[w].best; });
+      if (r.winner) { if (S[r.winner]) S[r.winner].wins++; else guestWins++; }
+      winners.push({ ds: ds, w: r.winner });
+    });
+    var sk = bzStreaks(bzWinners()), box = $("busstatsbody"); box.replaceChildren();
+    function seen(w) { return S[w].bus + S[w].flower; }
+    function rate(w) { var t = seen(w) + S[w].wrong; return t ? Math.round(seen(w) / t * 100) + " %" : "–"; }
+    var tot = seen("F") + seen("C"), pf = tot ? Math.round(seen("F") / tot * 100) : 50;
+    if (!Object.keys(days).length) { box.append(h("div", { class: "panel" }, h("p", { class: "noneyet" }, "In diesem Zeitraum gibt es noch keine Einträge."))); }
+    box.append(h("div", { class: "panel" }, h("h2", null, "Tagessiege"),
+      h("div", { class: "duo" },
+        h("div", { class: "bzbig F" }, h("div", { class: "num" }, String(S.F.wins)), h("div", { class: "lbl" }, "F gewinnt")),
+        h("div", { class: "bzbig C" }, h("div", { class: "num" }, String(S.C.wins)), h("div", { class: "lbl" }, "C gewinnt"))),
+      h("p", { class: "hint" }, (S.F.wins === S.C.wins ? "Gleichstand bei den Tagessiegen." : (S.F.wins > S.C.wins ? "F" : "C") + " führt bei den Tagessiegen.") + (guestWins ? " " + guestWins + (guestWins === 1 ? " Tag" : " Tage") + " gingen an Gäste." : ""))));
+    function streakCard(w) { return h("div", { class: "bzbig " + w }, h("div", { class: "num" }, sk[w].cur + (sk[w].cur >= 3 ? " 🔥" : "")), h("div", { class: "lbl" }, w + " Siege in Folge"), h("div", { class: "hint" }, "Rekord: " + sk[w].best)); }
+    box.append(h("div", { class: "panel" }, h("h2", null, "Siegesserie"), h("div", { class: "duo" }, streakCard("F"), streakCard("C")),
+      h("p", { class: "hint" }, "Gezählt werden nur Spieltage mit einem Sieger. Tage ohne Spiel oder ohne Sieger ändern nichts. Die Serie endet erst, wenn jemand anderes (auch ein Gast) einen Tag gewinnt. Die Serie gilt über alle Tage, unabhängig vom Zeitraum.")));
+    var table = h("table", { class: "bztable" }, h("thead", null, h("tr", null, h("th"), h("th", { class: "F" }, "F"), h("th", { class: "C" }, "C"))), h("tbody", null));
+    function row(label, a, b, hb) {
+      var lead = hb === undefined || a === b ? 0 : ((a > b) === hb ? 1 : -1);
+      table.lastChild.append(h("tr", null, h("td", null, label), h("td", { class: lead === 1 ? "lead" : "" }, String(a)), h("td", { class: lead === -1 ? "lead" : "" }, String(b))));
+    }
+    row("Busse gesehen", S.F.bus, S.C.bus, true);
+    row("KölleBusse", S.F.flower, S.C.flower, true);
+    row("Falsch gesehen (Platten)", S.F.wrong, S.C.wrong, false);
+    row("Trefferquote", rate("F"), rate("C"));
+    row("Bester Tag (Felder)", S.F.best, S.C.best, true);
+    box.append(h("div", { class: "panel" }, h("h2", null, "Vergleich"), table,
+      h("div", { class: "bar", role: "img", "aria-label": "Anteil gesehener Busse: F " + pf + " Prozent" }, h("span", { class: "bf", style: "width:" + pf + "%" }), h("span", { class: "bc", style: "width:" + (100 - pf) + "%" })),
+      h("p", { class: "hint" }, "Anteil gesehener Busse (Bus und KölleBus): F " + pf + " %, C " + (100 - pf) + " %. Gäste zählen hier nicht mit.")));
+    var dw = h("div", { class: "bzdays" });
+    winners.slice(-30).forEach(function (x) {
+      dw.append(h("span", { class: "bzd " + (x.w ? bzCls(x.w) : ""), title: x.ds + (x.w ? ": " + bzName(x.w) + " gewinnt" : ": kein Sieger") }, x.w ? bzInit(x.w) : "·"));
+    });
+    if (winners.length) box.append(h("div", { class: "panel" }, h("h2", null, "Tagessieger der letzten Tage"), dw, h("p", { class: "hint" }, "Jedes Kästchen ist ein Spieltag. Grau heißt: niemand hat die 10 Felder geschafft. Andere Farben sind Gäste.")));
+  }
+
+  function busRender() {
+    if (busAll === null) { $("busmain").hidden = true; $("busloading").hidden = false; return; }
+    $("busmain").hidden = false; $("busloading").hidden = true;
+    Array.prototype.forEach.call($("bustabs").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === busTab)); });
+    Array.prototype.forEach.call($("busme").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === me)); });
+    Array.prototype.forEach.call($("busperiod").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === busPeriod)); });
+    $("busracev").hidden = busTab !== "race"; $("busstatsv").hidden = busTab !== "stats";
+    $("busmerow").hidden = busTab !== "race";
+    if (busTab === "race") busRenderRace(); else busRenderStats();
+  }
+  function busRefresh() {
+    if (section === "bus") busRender();
+    if (section === "home") renderHome();
+  }
+  function busHomeCard() {
+    var ts = todayStr(), ids = bzPlayers(ts), r = bzReplay(bzDayEvents(ts), ids);
+    var lead = ids.slice().sort(function (a, b) { return r.st[b].pos - r.st[a].pos; });
+    var body = [];
+    ids.forEach(function (id) {
+      var p = r.st[id];
+      body.push(h("div", { class: "bzmini" }, h("span", { class: "bzchip " + bzCls(id) }, bzInit(id)),
+        h("div", { class: "bztrack" }, h("div", { class: "bzfill " + bzCls(id), style: "width:" + (p.pos / BZ_GOAL * 100) + "%" })),
+        h("span", { class: "n" }, p.pos + "/" + BZ_GOAL + (p.debt ? " 🔧" : ""))));
+    });
+    var top = r.st[lead[0]].pos, second = r.st[lead[1]].pos;
+    var txt = r.winner ? "🏁 " + bzName(r.winner) + " hat heute gewonnen." : (top === 0 ? "Noch kein Bus gesehen. Wer sieht den ersten?" : (top === second ? "Gleichstand!" : bzName(lead[0]) + " führt mit " + top + " zu " + second + "."));
+    var fl = ids.filter(function (id) { return r.st[id].debt > 0; }).map(bzName);
+    body.push(h("p", { class: "foot" }, txt + (fl.length ? " Platten bei: " + fl.join(", ") + "." : "")));
+    var sk = bzStreaks(bzWinners());
+    if (sk.F.cur || sk.C.cur) body.push(h("p", { class: "foot" }, "Serie: F " + sk.F.cur + " · C " + sk.C.cur + " Siege in Folge"));
+    return homeCard("Bus-Rennen", "bus", body, "Zum Rennen");
+  }
+
+  $("bustabs").addEventListener("click", function (e) { var v = e.target.getAttribute && e.target.getAttribute("data-v"); if (v !== "race" && v !== "stats") return; busTab = v; lsSet("pp-bustab", v); busRender(); });
+  $("busme").addEventListener("click", function (e) { var v = e.target.getAttribute && e.target.getAttribute("data-v"); if (v !== "F" && v !== "C") return; me = v; lsSet("pp-me", v); syncControls(); busRender(); });
+  $("busperiod").addEventListener("click", function (e) { var v = e.target.getAttribute && e.target.getAttribute("data-v"); if (v !== "7" && v !== "30" && v !== "all") return; busPeriod = v; lsSet("pp-busperiod", v); busRender(); });
+  $("busundo").addEventListener("click", busUndo);
+  $("busguestadd").addEventListener("click", busAddGuest);
+  $("busguestname").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); busAddGuest(); } });
+  window.addEventListener("resize", function () { if (section === "bus" && busTab === "race") busRender(); });
+
   syncControls();
   render();
 
   /* ---------- Daten: Supabase (über js/store-supabase.js) ---------- */
-  var COLLS = ["tasks", "log", "stores", "shop", "recipes", "plan", "budgets", "spend", "events"];
+  var COLLS = ["tasks", "log", "stores", "shop", "recipes", "plan", "budgets", "spend", "events", "bus"];
   var dataStarted = false;
 
   function listen(coll, apply) {
@@ -2632,6 +2882,7 @@
       ensureRepeats();
     });
     listen("events", function (a) { events = a; eventsLoaded = true; if (!evDraft) renderCal(); });
+    listen("bus", function (a) { busAll = a; busRefresh(); });
     listen("spend", function (a) { spends = a; spendsLoaded = true; renderSpend(); ensureRepeats(); });
     store.start();
   }
