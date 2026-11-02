@@ -2310,9 +2310,9 @@
     $("calview").hidden = section !== "cal";
     $("busview").hidden = section !== "bus";
     $("homeview").hidden = section !== "home";
-    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["cook", "tabcook"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"], ["bus", "tabbus"]].forEach(function (p) {
+    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"], ["bus", "tabbus"]].forEach(function (p) {
       var b = $(p[1]);
-      if (section === p[0]) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+      if (section === p[0] || (p[0] === "meal" && section === "cook")) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
     if (section === "home") { try { renderHome(); } catch (e) {} }
   }
@@ -2332,7 +2332,6 @@
   $("tabhome").addEventListener("click", function () { goSection("home"); });
   $("tabputz").addEventListener("click", function () { section = "putz"; lsSet("pp-section", "putz"); syncControls(); });
   $("tabshop").addEventListener("click", function () { section = "shop"; lsSet("pp-section", "shop"); syncControls(); });
-  $("tabcook").addEventListener("click", function () { section = "cook"; lsSet("pp-section", "cook"); syncControls(); });
   $("tabbus").addEventListener("click", function () { goSection("bus"); });
   $("tabcal").addEventListener("click", function () { section = "cal"; lsSet("pp-section", "cal"); syncControls(); renderCal(); });
   $("calprev").addEventListener("click", function () { calStep(-1); });
@@ -2455,6 +2454,12 @@
       toast(eur(cents) + " eingetragen." + (doc.repeat ? " Wiederholt sich " + repeatText(doc) + "." : ""));
       $("samount").focus();
     }).catch(writeFail);
+  });
+  ["mealseg", "cookmealseg"].forEach(function (id) {
+    $(id).addEventListener("click", function (e) {
+      var v = e.target.getAttribute && e.target.getAttribute("data-go");
+      if (v === "meal") { pickDay = null; goSection("meal"); } else if (v === "cook") goSection("cook");
+    });
   });
   $("tabmeal").addEventListener("click", function () { section = "meal"; lsSet("pp-section", "meal"); pickDay = null; syncControls(); renderMeal(); });
   $("pickplan").addEventListener("click", function () { section = "meal"; lsSet("pp-section", "meal"); pickDay = null; syncControls(); renderMeal(); });

@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
-<link rel="stylesheet" href="css/app.css?v=21">
+<link rel="stylesheet" href="css/app.css?v=22">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -58,8 +58,7 @@
       <button class="tab" type="button" id="tabhome">Heute</button>
       <button class="tab" type="button" id="tabputz">Putzplan</button>
       <button class="tab" type="button" id="tabshop">Einkauf</button>
-      <button class="tab" type="button" id="tabcook">Kochbuch</button>
-      <button class="tab" type="button" id="tabmeal">Essensplan</button>
+      <button class="tab" type="button" id="tabmeal">Essen</button>
       <button class="tab" type="button" id="tabcal">Kalender</button>
       <button class="tab" type="button" id="tabspend">Ausgaben</button>
       <button class="tab" type="button" id="tabbus">Bus-Rennen</button>
@@ -94,10 +93,20 @@
           <div><button class="linkbtn" type="button" id="busundo">↶ Letzten Eintrag zurücknehmen</button></div>
         </div>
         <div class="panel"><h2>Heute eingetragen</h2><ul class="bzlog" id="buslog"></ul></div>
-        <div class="panel">
-          <h2>Regeln</h2>
-          <p class="hint">Wer zuerst einen Bus sieht und laut „Bus" sagt: +1 Feld. KölleBus (Bus mit Blumenlogo): +2 Felder. Kein Bus (verguckt): Der Bus bekommt einen Platten und steht, bis dieser Spieler 10 richtige Punkte gesammelt hat. Wer zuerst 10 Felder schafft, gewinnt den Tag. Um Mitternacht beginnt alles neu. Jeder darf für jeden eintragen. Gäste spielen nur für den einen Tag mit.</p>
-        </div>
+        <details class="panel bzrules">
+          <summary>Regeln</summary>
+          <ul class="bzrulelist">
+            <li><b>Bus gesehen und laut „Bus" gesagt:</b> +1 Feld, wer zuerst ruft.</li>
+            <li><b>KölleBus</b> (Bus mit Blumenlogo): +2 Felder.</li>
+            <li><b>Kein Bus (verguckt):</b> Der Bus bekommt einen Platten und steht still.</li>
+            <li><b>Platten reparieren:</b> Der Spieler muss 10 richtige Punkte sammeln, erst dann fährt sein Bus weiter.</li>
+            <li><b>Ziel:</b> Wer zuerst 10 Felder schafft, gewinnt den Tag.</li>
+            <li><b>Neuer Tag:</b> Um Mitternacht beginnt alles von vorn, egal ob jemand gewonnen hat.</li>
+            <li><b>Eintragen:</b> Jeder darf für jeden Punkte eintragen.</li>
+            <li><b>Gäste:</b> Spielen nur für den einen Tag mit.</li>
+            <li><b>Siegesserie:</b> Zählt nur Spieltage mit Sieger und endet erst, wenn jemand anderes gewinnt.</li>
+          </ul>
+        </details>
       </div>
       <div class="col" id="busstatsv" hidden>
         <div class="toolbar">
@@ -240,6 +249,10 @@
   </section>
 
   <section class="col" id="cookview" hidden>
+    <div class="seg viewseg" id="cookmealseg" role="group" aria-label="Bereich Essen">
+      <button type="button" data-go="meal" aria-pressed="false">Essensplan</button>
+      <button type="button" data-go="cook" aria-pressed="true">Kochbuch</button>
+    </div>
     <div class="col" id="cooklist">
       <div class="seg viewseg" id="cookseg" role="group" aria-label="Ansicht Kochbuch">
         <button type="button" data-v="menu" aria-pressed="true">Speisekarte</button>
@@ -265,6 +278,10 @@
   </section>
 
   <section class="col" id="mealview" hidden>
+    <div class="seg viewseg" id="mealseg" role="group" aria-label="Bereich Essen">
+      <button type="button" data-go="meal" aria-pressed="true">Essensplan</button>
+      <button type="button" data-go="cook" aria-pressed="false">Kochbuch</button>
+    </div>
     <p class="headline" id="mealhead" aria-live="polite">Essensplan wird geladen …</p>
     <div class="weeknav">
       <button class="linkbtn" type="button" id="weekprev" aria-label="Vorherige Woche">‹</button>
@@ -505,7 +522,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=21"></script>
-<script src="js/app.js?v=21"></script>
+<script src="js/store-supabase.js?v=22"></script>
+<script src="js/app.js?v=22"></script>
 </body>
 </html>
