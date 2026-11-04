@@ -20,7 +20,7 @@
   var confirmDel = null;
   var togetherAsk = null;
   var newFollow = {};
-  var cookTm = 0, cookEm = 0, openDish = {}, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
+  var cookQ = "", cookTm = 0, cookEm = 0, openDish = {}, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -236,6 +236,40 @@
       var days = Number(t.intervalDays) || 7;
       toast("„" + t.name + "“ erledigt" + (both ? " (zusammen, beide bekommen " + pointsOf(t) + (pointsOf(t) === 1 ? " Punkt" : " Punkte") + ")." : ".") + (fol.length ? " Jetzt fällig: " + fol.map(function (x) { return x.name; }).join(", ") + "." : "") + (demand ? "" : " Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + "."), "Rückgängig", function () {
         Promise.all([ref.update(prev)].concat(lrefs.map(function (lr) { return lr.delete(); }), folPrev.map(function (x) { return db.doc("tasks/" + x.id).update({ pending: x.pending, pendingBy: x.pendingBy }); }))).catch(writeFail);
+      });
+    }).catch(writeFail);
+  }
+  var confirmLogDel = null;
+  /* Einen erledigten Eintrag nachträglich zurücknehmen (bei "zusammen" beide Einträge) */
+  function removeLog(l) {
+    confirmLogDel = null;
+    if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
+    var gone = [l];
+    if (l.together) {
+      var sib = logs.filter(function (x) { return x.id !== l.id && x.together && x.taskId === l.taskId && x.date === l.date && x.by !== l.by && Math.abs((x.at || 0) - (l.at || 0)) < 120000; })[0];
+      if (sib) gone.push(sib);
+    }
+    var goneIds = {}; gone.forEach(function (x) { goneIds[x.id] = true; });
+    var saved = gone.map(function (x) { var d = Object.assign({}, x); delete d.id; return { id: x.id, data: d }; });
+    var writes = gone.map(function (x) { return db.doc("log/" + x.id).delete(); });
+    var t = l.taskId ? (tasks || []).filter(function (y) { return y.id === l.taskId; })[0] : null;
+    var prev = null;
+    if (t) {
+      var rest = logs.filter(function (x) { return x.taskId === t.id && !goneIds[x.id]; })
+        .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)) || (b.at || 0) - (a.at || 0); });
+      var last = rest[0] || null;
+      var cF = t.countF || 0, cC = t.countC || 0;
+      gone.forEach(function (x) { if (x.by === "C") cC = Math.max(0, cC - 1); else cF = Math.max(0, cF - 1); });
+      var upd = { lastDone: last ? last.date : "", lastBy: last ? (last.together ? "F & C" : last.by) : "", countF: cF, countC: cC };
+      if (t.assignee === "abwechselnd") upd.turn = last ? (last.together ? (t.turn || "F") : (last.by === "F" ? "C" : "F")) : (l.together ? (t.turn || "F") : (l.by === "C" ? "C" : "F"));
+      prev = { lastDone: t.lastDone || "", lastBy: t.lastBy || "", countF: t.countF || 0, countC: t.countC || 0, turn: t.turn || "" };
+      writes.push(db.doc("tasks/" + t.id).update(upd));
+    }
+    Promise.all(writes).then(function () {
+      toast("Eintrag „" + (l.task || "Aufgabe") + "“ entfernt.", "Rückgängig", function () {
+        var back = saved.map(function (s) { return db.doc("log/" + s.id).set(s.data); });
+        if (t && prev) back.push(db.doc("tasks/" + t.id).update(prev));
+        Promise.all(back).catch(writeFail);
       });
     }).catch(writeFail);
   }
@@ -529,13 +563,18 @@
     });
     box.append(roomPanel);
 
-    var recent = items.slice().sort(function (a, b) { return (b.at || 0) - (a.at || 0) || String(b.date).localeCompare(String(a.date)); }).slice(0, 8);
+    var recent = items.slice().sort(function (a, b) { return (b.at || 0) - (a.at || 0) || String(b.date).localeCompare(String(a.date)); }).slice(0, 15);
     var ul = h("ul", { class: "recent" });
     recent.forEach(function (l) {
       var who = l.by === "C" ? "C" : "F";
-      ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, (l.task || "Aufgabe") + (pointsOf(l) > 1 ? " · " + pointsOf(l) + " P." : "") + (l.together ? " · zusammen" : "")), h("span", { class: "rd" }, fmt(l.date))));
+      var del = confirmLogDel === l.id
+        ? h("div", { class: "row" },
+            h("button", { class: "linkbtn danger", type: "button", onclick: function () { removeLog(l); } }, "Entfernen"),
+            h("button", { class: "linkbtn", type: "button", onclick: function () { confirmLogDel = null; renderStats(); } }, "Behalten"))
+        : h("button", { class: "x", type: "button", "aria-label": "Erledigt-Eintrag entfernen: " + (l.task || "Aufgabe"), title: "Aus erledigt entfernen", onclick: function () { confirmLogDel = l.id; renderStats(); } }, "×");
+      ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, (l.task || "Aufgabe") + (pointsOf(l) > 1 ? " · " + pointsOf(l) + " P." : "") + (l.together ? " · zusammen" : "")), h("span", { class: "rd" }, fmt(l.date)), del));
     });
-    box.append(h("div", { class: "panel" }, h("h2", null, "Zuletzt erledigt"), ul));
+    box.append(h("div", { class: "panel" }, h("h2", null, "Zuletzt erledigt"), ul, h("p", { class: "hint" }, "Mit × nimmst du einen Eintrag wieder heraus, zum Beispiel wenn aus Versehen abgehakt wurde. Die Aufgabe, die Punkte und die Zählung gehen dann auf den Stand davor zurück.")));
     box.append(h("p", { class: "foot" }, "Gezählt wird ab dem ersten Abhaken in dieser Version."));
   }
 
@@ -763,6 +802,7 @@
     var dl = $("knownitems"); dl.replaceChildren();
     var known = {};
     items.forEach(function (i) { if (i.store === curStore && i.done && !known[i.name]) { known[i.name] = true; dl.append(h("option", { value: i.name })); } });
+    ingCatalog().forEach(function (c) { if (!known[c.name]) { known[c.name] = true; dl.append(h("option", { value: c.name })); } });
 
     if (dbMissing) {
       body.append(h("div", { class: "banner" }, h("p", null, connText())));
@@ -774,10 +814,38 @@
     var open = mine.filter(function (i) { return !i.done; }).sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
     var openKeys = {}; open.forEach(function (i) { openKeys[String(i.name).toLowerCase()] = true; });
     var favs = (Array.isArray(st.hist) ? st.hist : []).filter(function (x) { return x && x.n && !openKeys[String(x.n).toLowerCase()]; }).slice(0, 10);
-    if (favs.length) {
-      var fc = h("div", { class: "bought" });
-      favs.forEach(function (x) { fc.append(h("button", { class: "bchip", type: "button", onclick: function () { putMulti(st.id, x.n, x.a); } }, x.n)); });
-      body.append(h("section", { class: "group" }, h("h2", null, "Oft gekauft"), fc));
+    /* Vorrat: alles, was im Kochbuch als "Immer da" markiert ist; hier die Dinge dieses Ladens */
+    var stockBy = {};
+    (recipes || []).forEach(function (r) { (r.ingredients || []).forEach(function (g) {
+      if (kindOf(g) !== "stock") return;
+      var sid = resolveStore(g.store), nm0 = parseItem(g.name).name, k0 = nm0.toLowerCase();
+      if (!nm0 || !sid) return;
+      var m = stockBy[sid] = stockBy[sid] || { seen: {}, list: [] };
+      if (!m.seen[k0]) { m.seen[k0] = true; m.list.push(nm0); }
+    }); });
+    var stockList = ((stockBy[st.id] || {}).list || []).slice().sort(function (p, q) { return p.localeCompare(q, "de"); });
+    var stockFree = stockList.filter(function (n) { return !openKeys[n.toLowerCase()]; });
+    var otherStock = Object.keys(stockBy).filter(function (sid) { return sid !== st.id && storeName(sid); }).map(function (sid) { return storeName(sid) + " (" + stockBy[sid].list.length + ")"; });
+    var hasStock = stockList.length > 0 || otherStock.length > 0;
+    if (favs.length || hasStock) {
+      var cols = h("div", { class: "shopcols" });
+      if (favs.length) {
+        var fc = h("div", { class: "bought" });
+        favs.forEach(function (x) { fc.append(h("button", { class: "bchip", type: "button", onclick: function () { putMulti(st.id, x.n, x.a); } }, x.n)); });
+        cols.append(h("section", { class: "group" }, h("h2", null, "Oft gekauft"), fc));
+      }
+      if (hasStock) {
+        var sec = h("section", { class: "group" }, h("h2", null, "Vorrat", h("span", { class: "n" }, String(stockFree.length))));
+        if (stockFree.length) {
+          var sc = h("div", { class: "bought" });
+          stockFree.forEach(function (n) { sc.append(h("button", { class: "bchip", type: "button", onclick: function () { putMulti(st.id, n); } }, n)); });
+          sec.append(sc);
+        } else if (stockList.length) sec.append(h("p", { class: "hint" }, "Alles aus dem Vorrat steht schon auf der Liste."));
+        else sec.append(h("p", { class: "hint" }, "Für " + st.name + " ist im Kochbuch nichts als „Immer da“ eingetragen."));
+        if (otherStock.length) sec.append(h("p", { class: "hint" }, "Mehr Vorrat bei: " + otherStock.join(", ") + "."));
+        cols.append(sec);
+      }
+      body.append(cols);
     }
     var done = mine.filter(function (i) { return i.done; }).sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); });
 
@@ -880,6 +948,47 @@
     if (grp) doc.grp = grp;
     db.collection("shop").add(doc).catch(writeFail);
     return "added";
+  }
+  /* Zutaten-Katalog: gespeicherte Namen, Gerichte, Einkaufslisten und Einkaufsverlauf */
+  var catalogSaved = [];
+  function ingCatalog() {
+    var map = {}, order = [];
+    function add(name, store, w) {
+      var n = parseItem(name).name; if (!n) return;
+      var k = n.toLowerCase();
+      if (!map[k]) { map[k] = { name: n, store: "", w: 0 }; order.push(k); }
+      if (!map[k].store && store && storeName(store)) map[k].store = store;
+      map[k].w += w;
+    }
+    catalogSaved.forEach(function (c) { add(c.n, c.s, 1); });
+    (recipes || []).forEach(function (r) { (r.ingredients || []).forEach(function (g) { add(g.name, g.store, 2); }); });
+    (stores || []).forEach(function (s) { (Array.isArray(s.hist) ? s.hist : []).forEach(function (x) { if (x && x.n) add(x.n, s.id, 1 + Math.min(5, x.c || 0)); }); });
+    (items || []).forEach(function (i) { add(i.name, i.store, 1); });
+    return order.map(function (k) { return map[k]; });
+  }
+  function ingSuggest(text) {
+    var pi = parseItem(text), q = pi.name.toLowerCase();
+    if (q.length < 1) return [];
+    var res = ingCatalog().filter(function (c) { var l = c.name.toLowerCase(); return l !== q && l.indexOf(q) >= 0; });
+    res.sort(function (x, y) {
+      var xs = x.name.toLowerCase().indexOf(q) === 0 ? 0 : 1, ys = y.name.toLowerCase().indexOf(q) === 0 ? 0 : 1;
+      return xs - ys || y.w - x.w || x.name.localeCompare(y.name, "de");
+    });
+    return res.slice(0, 6);
+  }
+  function rememberIngs(ings) {
+    if (!db) return;
+    var have = {}; catalogSaved.forEach(function (c) { have[String(c.n).toLowerCase()] = true; });
+    var add = [];
+    ings.forEach(function (g) {
+      var n = parseItem(g.name).name, k = n.toLowerCase();
+      if (!n || have[k]) return;
+      have[k] = true; add.push({ n: n.slice(0, 60), s: g.store || "" });
+    });
+    if (!add.length) return;
+    var list = catalogSaved.concat(add).slice(-400);
+    catalogSaved = list;
+    db.doc("plan/_catalog").set({ list: list, at: Date.now() }).catch(function () {});
   }
   function guessStore(name) {
     var key = String(name).trim().toLowerCase();
@@ -1063,6 +1172,7 @@
     $("cookstats").hidden = !statsOn;
     $("cooklabels").hidden = !labelsOn;
     $("cookheadrow").hidden = statsOn || labelsOn;
+    $("cooksearchrow").hidden = statsOn || labelsOn || !recipes.length;
     box.hidden = statsOn || labelsOn;
     Array.prototype.forEach.call($("cookseg").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-v") === cookTab)); });
     if (statsOn) { $("pickbar").hidden = true; renderCookStats(); return; }
@@ -1088,11 +1198,15 @@
         if (anyEff) fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"), scaleInput("⚡", cookEm, "Aufwand höchstens", function (n) { cookEm = n; renderCook(); }), h("span", { class: "hint" }, cookEm ? "höchstens " + EFFORT_NAMES[cookEm] : "egal")));
         box.append(fr);
       }
+      var q = cookQ.trim().toLowerCase();
       var list = recipes.filter(function (r) {
         var c = timeCat(r.minutes), e = Math.round(Number(r.effort)) || 0;
-        return (!cookTm || (c >= 1 && c <= cookTm)) && (!cookEm || (e >= 1 && e <= cookEm));
+        if (!((!cookTm || (c >= 1 && c <= cookTm)) && (!cookEm || (e >= 1 && e <= cookEm)))) return false;
+        if (!q) return true;
+        var hay = [r.name].concat((r.ingredients || []).map(function (g) { return g.name; }), labelsOf(r).map(function (l) { return l.name; })).join(" ").toLowerCase();
+        return q.split(/\s+/).every(function (w) { return hay.indexOf(w) >= 0; });
       });
-      if (!list.length) box.append(h("div", { class: "empty" }, h("b", null, "Kein Gericht passt"), h("span", null, "Lockere die Auswahl bei Zeit oder Aufwand, oder tippe die Symbole wieder ab.")));
+      if (!list.length) box.append(h("div", { class: "empty" }, h("b", null, "Kein Gericht passt"), h("span", null, q ? "Zu „" + cookQ.trim() + "“ gibt es keinen Treffer. Ändere die Suche oder lockere Zeit und Aufwand." : "Lockere die Auswahl bei Zeit oder Aufwand, oder tippe die Symbole wieder ab.")));
       var ul = h("ul", { class: "dishes" });
       list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "de"); }).forEach(function (r) { ul.append(dishEl(r)); });
       box.append(ul);
@@ -1302,8 +1416,23 @@
     draft.ings.forEach(function (g, idx) {
       var sel = h("select", { "aria-label": "Laden für Zutat " + (idx + 1), onchange: function (e) { g.store = e.target.value; g.touched = true; } });
       storeList.forEach(function (s) { sel.append(h("option", { value: s.id, selected: s.id === g.store }, s.name)); });
-      var nm = h("input", { class: "ingname", type: "text", maxlength: "80", placeholder: "z. B. 500 g Hackfleisch", "aria-label": "Zutat " + (idx + 1), value: g.name,
-        oninput: function (e) { g.name = e.target.value; },
+      var sug = h("div", { class: "sugg", role: "listbox", "aria-label": "Vorschläge" });
+      var showSug = function () {
+        sug.replaceChildren();
+        var list = ingSuggest(g.name);
+        list.forEach(function (c) {
+          sug.append(h("button", { class: "bchip", type: "button", role: "option", onmousedown: function (e) { e.preventDefault(); }, onclick: function () {
+            var raw = String(g.name), i = raw.toLowerCase().lastIndexOf(parseItem(raw).name.toLowerCase());
+            g.name = (i > 0 ? raw.slice(0, i) : "") + c.name; nm.value = g.name;
+            if (c.store && !g.touched) { g.store = resolveStore(c.store); sel.value = g.store; }
+            sug.replaceChildren();
+          } }, c.name));
+        });
+      };
+      var nm = h("input", { class: "ingname", type: "text", maxlength: "80", placeholder: "z. B. 500 g Hackfleisch", "aria-label": "Zutat " + (idx + 1), value: g.name, autocomplete: "off",
+        oninput: function (e) { g.name = e.target.value; showSug(); },
+        onfocus: function () { showSug(); },
+        onblur: function () { setTimeout(function () { sug.replaceChildren(); }, 200); },
         onchange: function () {
           if (g.touched) return;
           var gs = guessStore(g.name);
@@ -1317,7 +1446,7 @@
       } }, "×");
       var ksel = h("select", { class: "kindsel", "aria-label": "Art von Zutat " + (idx + 1), onchange: function (e) { g.k = e.target.value; } });
       Object.keys(KIND_NAMES).forEach(function (kk) { ksel.append(h("option", { value: kk, selected: kk === (g.k || "") }, KIND_NAMES[kk])); });
-      panel.append(h("div", { class: "ingwrap" }, h("div", { class: "ingrow" }, nm, sel, rm), ksel));
+      panel.append(h("div", { class: "ingwrap" }, h("div", { class: "ingrow" }, nm, sel, rm), sug, ksel));
     });
     panel.append(h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: addIngRow }, "+ Zutat")));
     var actions = h("div", { class: "row" },
@@ -1341,6 +1470,7 @@
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
     var ings = draft.ings.map(function (g) { var o = { name: g.name.trim(), store: g.store || "" }; if (g.k === "opt" || g.k === "stock") o.k = g.k; return o; }).filter(function (g) { return g.name; });
     var p;
+    rememberIngs(ings);
     var mins = Math.round(Number(draft.minutes)) || 0;
     if (mins < 0 || mins > 1440) { toast("Die Dauer sollte zwischen 1 und 1440 Minuten liegen."); return; }
     var eff = Math.round(Number(draft.effort)) || 0;
@@ -1449,7 +1579,7 @@
       try { saved = JSON.parse(lsGet("pp-dice-" + slot) || "{}") || {}; } catch (e) {}
       var tm = Number(saved.tm) || 0;
       if (!tm && Array.isArray(saved.t) && saved.t.length) tm = Math.max.apply(null, saved.t.map(Number));
-      diceState[key] = { tm: tm >= 1 && tm <= TIME_CATS.length ? tm : 0, e: Math.min(5, Math.max(0, Number(saved.e) || 0)), cur: null, seen: [] };
+      diceState[key] = { tm: tm >= 1 && tm <= TIME_CATS.length ? tm : 0, e: Math.min(5, Math.max(0, Number(saved.e) || 0)), l: Array.isArray(saved.l) ? saved.l.filter(function (x) { return typeof x === "string"; }) : [], cur: null, seen: [] };
     }
     return diceState[key];
   }
@@ -1457,6 +1587,8 @@
     var all = (recipes || []).filter(function (r) {
       if (d.tm && !(timeCat(r.minutes) >= 1 && timeCat(r.minutes) <= d.tm)) return false;
       if (d.e && !(Number(r.effort) >= 1 && Number(r.effort) <= d.e)) return false;
+      var dl = d.l.filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
+      if (dl.length && !(Array.isArray(r.labels) && dl.some(function (id) { return r.labels.indexOf(id) >= 0; }))) return false;
       return true;
     });
     var fresh = all.filter(function (r) { return !plannedWeek[r.id]; });
@@ -1477,22 +1609,35 @@
   function diceEl(ds, slot, key) {
     var Cap = capOf(slot);
     var d = diceInit(key, slot);
-    var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ tm: d.tm, e: d.e })); d.cur = null; d.seen = []; renderMeal(); };
+    var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ tm: d.tm, e: d.e, l: d.l })); d.cur = null; d.seen = []; renderMeal(); };
     var tSel = h("div", { class: "scrow" }, h("span", { class: "zl" }, "Schnell"),
       scaleInput("🕐", d.tm, "Zeit höchstens", function (n) { d.tm = n; save(); }),
       h("span", { class: "hint" }, d.tm ? "bis " + TIME_CATS[d.tm - 1].short : "egal"));
     var eSel = h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"),
       scaleInput("⚡", d.e, "Aufwand höchstens", function (n) { d.e = n; save(); }),
       h("span", { class: "hint" }, d.e ? "höchstens " + EFFORT_NAMES[d.e] : "egal"));
+    var lSel = null;
+    if (labelDefs.length) {
+      lSel = h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"));
+      var lchips = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
+      labelDefs.forEach(function (l) {
+        var on = d.l.indexOf(l.id) >= 0;
+        lchips.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () {
+          d.l = on ? d.l.filter(function (x) { return x !== l.id; }) : d.l.concat([l.id]); save();
+        } }, l.emoji));
+      });
+      var act = labelDefs.filter(function (l) { return d.l.indexOf(l.id) >= 0; });
+      lSel.append(lchips, h("span", { class: "hint" }, act.length ? act.map(function (l) { return l.name; }).join(" oder ") : "egal"));
+    }
     var week = {};
     var mon = weekStart(dn(ds));
     for (var j = 0; j < 7; j++) allDishes(plan[dnToStr(mon + j)]).forEach(function (x) { week[x.id] = true; });
     var info = dicePool(d, week), cur = (recipes || []).filter(function (r) { return r.id === d.cur; })[0];
-    var unknown = (d.tm || d.e) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
+    var unknown = (d.tm || d.e || d.l.length) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
     var box = h("div", { class: "dice" },
-      tSel, eSel);
+      tSel, eSel, lSel);
     if (!info.all.length) {
-      box.append(h("p", { class: "noneyet" }, (d.tm || d.e) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand und Dauer oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
+      box.append(h("p", { class: "noneyet" }, (d.tm || d.e || d.l.length) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand, Dauer oder Labels oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
     } else {
       if (cur) {
         var taken = slotsOf(plan[ds])[slot].some(function (x) { return x.id === cur.id; });
@@ -2560,6 +2705,8 @@
     if (!v) return;
     cookTab = v; renderCook();
   });
+  $("cooksearch").addEventListener("input", function (e) { cookQ = e.target.value; renderCook(); });
+  $("cooksearchclear").addEventListener("click", function () { cookQ = ""; $("cooksearch").value = ""; renderCook(); $("cooksearch").focus(); });
   $("newrecipe").addEventListener("click", function () { openEditor(null); });
   $("pickclear").addEventListener("click", function () { picked = {}; renderCook(); });
   $("pickgo").addEventListener("click", function () {
@@ -2953,6 +3100,8 @@
     listen("plan", function (a) {
       var m = {};
       a.forEach(function (d) { m[d.id] = d; });
+      var cd = m._catalog; delete m._catalog;
+      catalogSaved = cd && Array.isArray(cd.list) ? cd.list.filter(function (c) { return c && typeof c.n === "string"; }) : [];
       var ld = m._labels; delete m._labels;
       labelDefs = ld && Array.isArray(ld.list) ? ld.list.filter(function (l) { return l && typeof l.id === "string" && typeof l.emoji === "string" && typeof l.name === "string"; }) : [];
       plan = m; planLoaded = true;

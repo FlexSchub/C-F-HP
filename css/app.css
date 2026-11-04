@@ -603,3 +603,25 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .labelrow input[type="text"] { flex: 1 1 auto; min-width: 0; }
 .labelrow .emoin { flex: 0 0 4.5rem; text-align: center; font-size: 1.3rem; }
 .lemoji { font-size: 1.5rem; width: 2.2rem; text-align: center; }
+.sugg { display: flex; gap: 6px; flex-wrap: wrap; }
+.sugg:empty { display: none; }
+.sugg .bchip { min-height: 36px; padding: 4px 12px; }
+.lchips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.lchip { border: 1px solid var(--line-strong); background: transparent; border-radius: 999px; min-width: 44px; min-height: 40px; padding: 0 8px; font-size: 1.25rem; line-height: 1; opacity: 0.55; transition: opacity 0.12s, background 0.12s; }
+.lchip.on { opacity: 1; background: var(--accent); border-color: var(--accent); }
+
+.searchrow { display: flex; gap: 8px; align-items: center; }
+.searchrow input { flex: 1 1 auto; min-width: 0; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px 14px; min-height: 48px; font-size: 1rem; }
+.recent li { grid-template-columns: 30px minmax(0, 1fr) auto auto; }
+.recent .x { width: 34px; height: 34px; }
+
+.stockbox { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; }
+.stockbox[open] { padding-bottom: 12px; display: flex; flex-direction: column; gap: 10px; }
+.stockbox summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; min-height: 48px; font-family: var(--font-display); font-weight: 600; font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.stockbox summary::-webkit-details-marker { display: none; }
+.stockbox summary::after { content: "+"; color: var(--accent); font-size: 1.2rem; margin-left: 8px; }
+.stockbox[open] summary::after { content: "–"; }
+.stockbox summary .n { margin-left: auto; }
+
+.shopcols { display: grid; grid-template-columns: 1fr; gap: 18px; }
+@media (min-width: 700px) { .shopcols { grid-template-columns: 1fr 1fr; align-items: start; } }
