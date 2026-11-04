@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
-<link rel="stylesheet" href="css/app.css?v=33">
+<link rel="stylesheet" href="css/app.css?v=34">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -51,10 +51,16 @@
 <main class="app" id="appview" hidden>
   <header class="top">
     <div class="brand">
-      <h1>Putzplan <span class="amp">F &amp; C</span></h1>
-      <span class="date" id="today"></span>
+      <div class="brandtxt">
+        <h1>Putzplan <span class="amp">F &amp; C</span></h1>
+        <span class="date" id="today"></span>
+      </div>
+      <button class="menubtn" type="button" id="menubtn" aria-expanded="false" aria-controls="mainnav" aria-label="Menü öffnen">
+        <span class="menucur" id="menucur">Heute</span>
+        <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
+      </button>
     </div>
-    <nav class="tabs" aria-label="Bereiche">
+    <nav class="tabs" id="mainnav" aria-label="Bereiche" hidden>
       <button class="tab" type="button" id="tabhome">Heute</button>
       <button class="tab" type="button" id="tabputz">Putzplan</button>
       <button class="tab" type="button" id="tabshop">Einkauf</button>
@@ -527,7 +533,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=33"></script>
-<script src="js/app.js?v=33"></script>
+<script src="js/store-supabase.js?v=34"></script>
+<script src="js/app.js?v=34"></script>
 </body>
 </html>

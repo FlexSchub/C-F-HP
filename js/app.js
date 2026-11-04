@@ -2580,8 +2580,23 @@
       var b = $(p[1]);
       if (section === p[0] || (p[0] === "meal" && section === "cook")) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
+    var curTab = $(section === "cook" ? "tabmeal" : "tab" + section);
+    if (curTab && $("menucur")) $("menucur").textContent = curTab.textContent;
+    setMenu(false);
     if (section === "home") { try { renderHome(); } catch (e) {} }
   }
+  /* Menü (Burger) auf- und zuklappen */
+  function setMenu(open) {
+    var nav = $("mainnav"), btn = $("menubtn");
+    if (!nav || !btn) return;
+    nav.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+    btn.setAttribute("aria-label", open ? "Menü schließen" : "Menü öffnen");
+    btn.classList.toggle("open", open);
+  }
+  $("menubtn").addEventListener("click", function (e) { e.stopPropagation(); setMenu($("mainnav").hidden); });
+  document.addEventListener("click", function (e) { var nav = $("mainnav"); if (nav && !nav.hidden && !nav.contains(e.target) && !$("menubtn").contains(e.target)) setMenu(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("mainnav").hidden) { setMenu(false); $("menubtn").focus(); } });
 
   /* Start */
   ROOMS.forEach(function (r) { $("newroom").append(h("option", { value: r }, r)); });
