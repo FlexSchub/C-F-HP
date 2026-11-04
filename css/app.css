@@ -625,3 +625,14 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 
 .shopcols { display: grid; grid-template-columns: 1fr; gap: 18px; }
 @media (min-width: 700px) { .shopcols { grid-template-columns: 1fr 1fr; align-items: start; } }
+
+/* Einklappbare Gruppen und Tage */
+.group.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; min-height: 44px; }
+.group.fold > summary::-webkit-details-marker { display: none; }
+.group.fold > summary h2 { margin: 0; }
+.group.fold > summary .chev::before { content: "▸"; color: var(--accent); }
+.group.fold[open] > summary .chev::before { content: "▾"; }
+.wtog { display: flex; align-items: baseline; gap: 8px; border: 0; background: transparent; padding: 4px 0; min-height: 36px; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.wtog .chev { color: var(--accent); }
+.wday.folded { padding-top: 6px; padding-bottom: 6px; gap: 0; }
+.wsum { margin-left: auto; color: var(--muted); font-size: 0.85rem; }

@@ -28,6 +28,7 @@
   var sv = lsGet("pp-section");
   var section = sv === "shop" || sv === "cook" || sv === "meal" || sv === "cal" || sv === "spend" || sv === "bus" || sv === "putz" ? sv : "home";
   var events = [], eventsLoaded = false;
+  var calOpen = {};
   var calMode = lsGet("pp-calmode") === "week" ? "week" : "month";
   var calAnchor = 0, calSel = 0;      // Tage seit 1970 (werden unten gesetzt)
   var evDraft = null, confirmEvDel = false;
@@ -470,7 +471,10 @@
       if (!items.length) return;
       var ul = h("ul", { class: "tasks" });
       items.forEach(function (x) { ul.append(row(x.t)); });
-      list.append(h("section", { class: "group" }, h("h2", null, g[0], h("span", { class: "n" }, String(items.length))), ul));
+      var gk = "pp-fold-" + g[0], det = h("details", { class: "group fold" }, h("summary", null, h("h2", null, g[0], h("span", { class: "n" }, String(items.length))), h("span", { class: "chev", "aria-hidden": "true" })), ul);
+      det.open = lsGet(gk) !== "0";
+      det.addEventListener("toggle", function () { lsSet(gk, det.open ? "1" : "0"); });
+      list.append(det);
     });
   }
 
@@ -1851,11 +1855,19 @@
       for (var i = 0; i < 7; i++) {
         (function (n) {
           var ds = dnToStr(n), evs = eventsOn(ds);
-          var card = h("div", { class: "wday" + (n === today ? " today" : "") + (n < today ? " past" : "") },
-            h("div", { class: "whead" }, h("b", null, WDLONG[(n + 3) % 7]), h("span", null, dayLabel(n)),
-              h("button", { class: "linkbtn", type: "button", onclick: function () { openEv(null, ds); } }, "+ Termin")));
-          if (!evs.length) card.append(h("p", { class: "noneyet" }, "Keine Termine"));
-          else { var lst = h("div", { class: "evlist" }); evs.forEach(function (e) { lst.append(evRow(e)); }); card.append(lst); }
+          var past = n < today, folded = past && !calOpen[ds];
+          var card = h("div", { class: "wday" + (n === today ? " today" : "") + (past ? " past" : "") + (folded ? " folded" : "") });
+          var head = h("div", { class: "whead" });
+          if (past) head.append(h("button", { class: "wtog", type: "button", "aria-expanded": String(!folded), "aria-label": WDLONG[(n + 3) % 7] + " " + dayLabel(n) + (folded ? " aufklappen" : " zuklappen"), onclick: function () { if (calOpen[ds]) delete calOpen[ds]; else calOpen[ds] = true; renderCal(); } },
+            h("b", null, WDLONG[(n + 3) % 7]), h("span", null, dayLabel(n)), h("span", { class: "chev", "aria-hidden": "true" }, folded ? "▸" : "▾")));
+          else head.append(h("b", null, WDLONG[(n + 3) % 7]), h("span", null, dayLabel(n)));
+          if (folded) head.append(h("span", { class: "wsum" }, evs.length ? evs.length + (evs.length === 1 ? " Termin" : " Termine") : "keine Termine"));
+          else head.append(h("button", { class: "linkbtn", type: "button", onclick: function () { openEv(null, ds); } }, "+ Termin"));
+          card.append(head);
+          if (!folded) {
+            if (!evs.length) card.append(h("p", { class: "noneyet" }, "Keine Termine"));
+            else { var lst = h("div", { class: "evlist" }); evs.forEach(function (e) { lst.append(evRow(e)); }); card.append(lst); }
+          }
           grid.append(card);
         })(mon + i);
       }
