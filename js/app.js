@@ -20,7 +20,7 @@
   var confirmDel = null;
   var togetherAsk = null;
   var newFollow = {};
-  var cookQ = "", cookTm = 0, cookEm = 0, openDish = {}, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
+  var cookQ = "", cookL = [], cookTm = 0, cookEm = 0, openDish = {}, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -639,7 +639,7 @@
     hist.sort(function (a, b) { return (b.c || 0) - (a.c || 0) || (b.t || 0) - (a.t || 0); });
     db.doc("stores/" + st.id).update({ hist: hist.slice(0, 30) }).catch(function () {});
   }
-  var editItemId = null;
+  var editItemId = null, doneEdit = false;
   var alsoSel = {}, alsoFor = null;
   var aisleSort = lsGet("pp-aisle") !== "off";
 
@@ -835,7 +835,9 @@
         cols.append(h("section", { class: "group" }, h("h2", null, "Oft gekauft"), fc));
       }
       if (hasStock) {
-        var sec = h("section", { class: "group" }, h("h2", null, "Vorrat", h("span", { class: "n" }, String(stockFree.length))));
+        var sec = h("details", { class: "stockbox" }, h("summary", null, "Vorrat", h("span", { class: "n" }, String(stockFree.length))));
+        sec.open = lsGet("pp-stockopen") === "1";
+        sec.addEventListener("toggle", function () { lsSet("pp-stockopen", sec.open ? "1" : "0"); });
         if (stockFree.length) {
           var sc = h("div", { class: "bought" });
           stockFree.forEach(function (n) { sc.append(h("button", { class: "bchip", type: "button", onclick: function () { putMulti(st.id, n); } }, n)); });
@@ -881,15 +883,31 @@
     }
 
     if (done.length) {
-      var chips = h("div", { class: "bought" });
-      done.forEach(function (it) { chips.append(h("button", { class: "bchip", type: "button", onclick: function () { setDone(it, false); } }, it.name)); });
+      var chips;
+      if (doneEdit) {
+        chips = h("ul", { class: "items" });
+        done.forEach(function (it) {
+          var chk = h("button", { class: "check", type: "button", "aria-label": "Wieder auf die Liste: " + it.name, title: "Wieder auf die Liste", onclick: function () { setDone(it, false); } });
+          chk.innerHTML = CHECK;
+          if (editItemId === it.id) { chips.append(editItemRow(it, chk)); return; }
+          chips.append(h("li", null, chk,
+            h("button", { class: "nm nmbtn", type: "button", "aria-label": "Bearbeiten: " + it.name, onclick: function () { editItemId = it.id; renderShop(); } },
+              it.qty ? h("b", { class: "qty" }, it.qty + " ") : null, it.name, alsoLabel(it)),
+            h("button", { class: "x", type: "button", "aria-label": it.name + " löschen", onclick: function () { delItem(it); } }, "×")));
+        });
+      } else {
+        chips = h("div", { class: "bought" });
+        done.forEach(function (it) { chips.append(h("button", { class: "bchip", type: "button", onclick: function () { setDone(it, false); } }, it.name)); });
+      }
       var cleanRow = h("div", { class: "row" });
       if (confirmClean) {
         cleanRow.append(
           h("button", { class: "linkbtn danger", type: "button", onclick: function () { cleanBought(st); } }, "Ja, alle löschen"),
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmClean = false; renderShop(); } }, "Abbrechen"));
       } else {
-        cleanRow.append(h("button", { class: "linkbtn", type: "button", onclick: function () { confirmClean = true; renderShop(); } }, "Gekaufte Artikel aufräumen"));
+        cleanRow.append(
+          h("button", { class: "linkbtn", type: "button", onclick: function () { doneEdit = !doneEdit; editItemId = null; renderShop(); } }, doneEdit ? "Fertig" : "Einzelne bearbeiten"),
+          h("button", { class: "linkbtn", type: "button", onclick: function () { confirmClean = true; renderShop(); } }, "Alle aufräumen"));
       }
       body.append(h("section", { class: "group" },
         h("h2", null, "Schon gekauft", h("span", { class: "n" }, String(done.length))),
@@ -1192,21 +1210,34 @@
     } else {
       var anyTime = recipes.some(function (r) { return timeCat(r.minutes) > 0; });
       var anyEff = recipes.some(function (r) { return Number(r.effort) >= 1; });
-      if (anyTime || anyEff) {
+      if (anyTime || anyEff || labelDefs.length) {
         var fr = h("div", { class: "filters" });
         if (anyTime) fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Zeit"), scaleInput("🕐", cookTm, "Zeit höchstens", function (n) { cookTm = n; renderCook(); }), h("span", { class: "hint" }, cookTm ? "bis " + TIME_CATS[cookTm - 1].short : "egal")));
         if (anyEff) fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"), scaleInput("⚡", cookEm, "Aufwand höchstens", function (n) { cookEm = n; renderCook(); }), h("span", { class: "hint" }, cookEm ? "höchstens " + EFFORT_NAMES[cookEm] : "egal")));
+        if (labelDefs.length) {
+          var lc = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
+          labelDefs.forEach(function (l) {
+            var on = cookL.indexOf(l.id) >= 0;
+            lc.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () {
+              cookL = on ? cookL.filter(function (x) { return x !== l.id; }) : cookL.concat([l.id]); renderCook();
+            } }, l.emoji));
+          });
+          var actL = labelDefs.filter(function (l) { return cookL.indexOf(l.id) >= 0; });
+          fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, actL.length ? actL.map(function (l) { return l.name; }).join(" oder ") : "egal")));
+        }
         box.append(fr);
       }
+      var cl = cookL.filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
       var q = cookQ.trim().toLowerCase();
       var list = recipes.filter(function (r) {
         var c = timeCat(r.minutes), e = Math.round(Number(r.effort)) || 0;
         if (!((!cookTm || (c >= 1 && c <= cookTm)) && (!cookEm || (e >= 1 && e <= cookEm)))) return false;
+        if (cl.length && !(Array.isArray(r.labels) && cl.some(function (id) { return r.labels.indexOf(id) >= 0; }))) return false;
         if (!q) return true;
         var hay = [r.name].concat((r.ingredients || []).map(function (g) { return g.name; }), labelsOf(r).map(function (l) { return l.name; })).join(" ").toLowerCase();
         return q.split(/\s+/).every(function (w) { return hay.indexOf(w) >= 0; });
       });
-      if (!list.length) box.append(h("div", { class: "empty" }, h("b", null, "Kein Gericht passt"), h("span", null, q ? "Zu „" + cookQ.trim() + "“ gibt es keinen Treffer. Ändere die Suche oder lockere Zeit und Aufwand." : "Lockere die Auswahl bei Zeit oder Aufwand, oder tippe die Symbole wieder ab.")));
+      if (!list.length) box.append(h("div", { class: "empty" }, h("b", null, "Kein Gericht passt"), h("span", null, q ? "Zu „" + cookQ.trim() + "“ gibt es keinen Treffer. Ändere die Suche oder lockere die Filter." : "Lockere die Auswahl bei Zeit, Aufwand oder Label, oder tippe die Symbole wieder ab.")));
       var ul = h("ul", { class: "dishes" });
       list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "de"); }).forEach(function (r) { ul.append(dishEl(r)); });
       box.append(ul);
