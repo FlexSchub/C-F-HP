@@ -657,3 +657,12 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .aislechips { display: flex; flex-direction: column; gap: 2px; }
 .aislechips .slabel2 { margin-top: 8px; }
 .picker + .picker, .slot .filters { margin: 4px 0; }
+
+.quicksugg { margin: -2px 0 8px; }
+.alsorow { margin-top: 0; }
+.editchip::before { content: ""; }
+.editchip { padding: 2px 6px 2px 12px; gap: 2px; }
+.editchip .nmbtn { background: none; border: 0; padding: 6px 4px; color: var(--ink); text-align: left; }
+.editchip .x { background: none; border: 0; padding: 6px 8px; color: var(--muted); font-size: 1.1rem; }
+.chipform { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; width: 100%; padding: 6px 0; }
+.chipform input { flex: 1 1 140px; }

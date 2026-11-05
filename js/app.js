@@ -643,7 +643,38 @@
     hist.sort(function (a, b) { return (b.c || 0) - (a.c || 0) || (b.t || 0) - (a.t || 0); });
     db.doc("stores/" + st.id).update({ hist: hist.slice(0, 30) }).catch(function () {});
   }
-  var editItemId = null, doneEdit = false;
+  var editItemId = null, doneEdit = false, chipEdit = null;
+  function histChange(storeId, oldName, newName, aisle) {
+    var st = (stores || []).filter(function (x) { return x.id === storeId; })[0];
+    if (!st || !db) return;
+    var key = String(oldName).toLowerCase(), nk = newName ? newName.toLowerCase() : "";
+    var hist = (Array.isArray(st.hist) ? st.hist : []).map(function (x) { return Object.assign({}, x); });
+    var out = [];
+    hist.forEach(function (x) {
+      var k = String(x.n).toLowerCase();
+      if (k === key) { if (!newName) return; x.n = newName.slice(0, 60); if (aisle) x.a = aisle; }
+      else if (nk && k === nk && nk !== key) return;
+      out.push(x);
+    });
+    db.doc("stores/" + storeId).update({ hist: out }).catch(writeFail);
+  }
+  function stockChange(oldName, newName) {
+    if (!db) return;
+    var key = oldName.toLowerCase();
+    (recipes || []).forEach(function (r) {
+      var changed = false;
+      var ings = (r.ingredients || []).map(function (g) {
+        var c = Object.assign({}, g);
+        if (kindOf(g) !== "stock" || parseItem(g.name).name.toLowerCase() !== key) return c;
+        changed = true;
+        if (!newName) { delete c.k; return c; }
+        var pi = parseItem(g.name);
+        c.name = (pi.qty ? pi.qty + " " : "") + newName;
+        return c;
+      });
+      if (changed) db.doc("recipes/" + r.id).update({ ingredients: ings }).catch(writeFail);
+    });
+  }
   var alsoSel = {}, alsoFor = null;
   var aisleSort = lsGet("pp-aisle") !== "off";
 
@@ -766,6 +797,40 @@
 
   /* Einkauf: Darstellung */
   function shopCount(id) { var n = 0; items.forEach(function (i) { if (i.store === id && !i.done) n++; }); return n; }
+  /* Suchleiste: Vorschläge bekannter Artikel; "Auch kaufbar bei" nur bei neuem Artikel */
+  function updateQuick() {
+    var qf = $("quickform"), ar = $("alsorow"), sg = $("quicksugg");
+    ar.replaceChildren(); sg.replaceChildren();
+    if (qf.hidden || !curStore) { ar.hidden = true; return; }
+    var raw = $("quickname").value, cut = raw.lastIndexOf(","), prefix = cut >= 0 ? raw.slice(0, cut + 1) + " " : "";
+    var q = parseItem(raw.slice(cut + 1)).name.toLowerCase();
+    if (q) {
+      var openKeys = {};
+      items.forEach(function (i) { if (i.store === curStore && !i.done) openKeys[String(i.name).toLowerCase()] = true; });
+      var res = ingCatalog().filter(function (c) { var l = c.name.toLowerCase(); return l.indexOf(q) >= 0 && !openKeys[l]; });
+      res.sort(function (x, y) {
+        var xs = x.name.toLowerCase().indexOf(q) === 0 ? 0 : 1, ys = y.name.toLowerCase().indexOf(q) === 0 ? 0 : 1;
+        return xs - ys || y.w - x.w || x.name.localeCompare(y.name, "de");
+      });
+      res.slice(0, 8).forEach(function (c) {
+        sg.append(h("button", { class: "bchip", type: "button", onmousedown: function (e) { e.preventDefault(); }, onclick: function () {
+          addItems(prefix + c.name); $("quickname").value = ""; updateQuick();
+        } }, c.name));
+      });
+    }
+    if (alsoFor !== curStore) { alsoSel = {}; alsoFor = curStore; }
+    var otherSt = sortedStores().filter(function (x) { return x.id !== curStore; });
+    ar.hidden = !q || !otherSt.length;
+    if (!ar.hidden) {
+      ar.append(h("span", { class: "hint" }, "Neu: auch kaufbar bei:"));
+      otherSt.forEach(function (x) {
+        var b = h("button", { class: "bchip" + (alsoSel[x.id] ? " sel" : ""), type: "button", "aria-pressed": String(!!alsoSel[x.id]), onclick: function () {
+          alsoSel[x.id] = !alsoSel[x.id]; b.classList.toggle("sel", !!alsoSel[x.id]); b.setAttribute("aria-pressed", String(!!alsoSel[x.id]));
+        } }, x.name);
+        ar.append(b);
+      });
+    }
+  }
   function renderShop() {
     var head = $("shophead"), bar = $("stores"), body = $("shopbody");
     bar.replaceChildren(); body.replaceChildren();
@@ -788,25 +853,10 @@
     $("storecancel").hidden = !st;
     $("storetitle").textContent = st ? "Neuer Laden" : "Euren ersten Laden anlegen";
     $("quickform").hidden = !st || showStoreForm;
-    $("quickname").placeholder = st ? "Zu " + st.name + " hinzufügen …" : "Artikel hinzufügen …";
+    $("quickname").placeholder = st ? "Artikel suchen oder neu hinzufügen …" : "Artikel hinzufügen …";
 
     if (alsoFor !== curStore) { alsoSel = {}; alsoFor = curStore; }
-    var ar = $("alsorow"); ar.replaceChildren();
-    var otherSt = list.filter(function (s) { return s.id !== curStore; });
-    ar.hidden = !st || showStoreForm || !otherSt.length;
-    if (!ar.hidden) {
-      ar.append(h("span", { class: "hint" }, "Auch kaufbar bei:"));
-      otherSt.forEach(function (s) {
-        var b = h("button", { class: "bchip" + (alsoSel[s.id] ? " sel" : ""), type: "button", "aria-pressed": String(!!alsoSel[s.id]), onclick: function () {
-          alsoSel[s.id] = !alsoSel[s.id]; b.classList.toggle("sel", !!alsoSel[s.id]); b.setAttribute("aria-pressed", String(!!alsoSel[s.id]));
-        } }, s.name);
-        ar.append(b);
-      });
-    }
-    var dl = $("knownitems"); dl.replaceChildren();
-    var known = {};
-    items.forEach(function (i) { if (i.store === curStore && i.done && !known[i.name]) { known[i.name] = true; dl.append(h("option", { value: i.name })); } });
-    ingCatalog().forEach(function (c) { if (!known[c.name]) { known[c.name] = true; dl.append(h("option", { value: c.name })); } });
+    updateQuick();
 
     if (dbMissing) {
       body.append(h("div", { class: "banner" }, h("p", null, connText())));
@@ -826,10 +876,27 @@
         if (!part.length) return;
         wrap.append(h("p", { class: "slabel2" }, ai));
         var row = h("div", { class: "bought" });
-        part.forEach(function (e) { row.append(h("button", { class: "bchip", type: "button", onclick: e.go }, e.name)); });
+        part.forEach(function (e) {
+          if (!doneEdit || !e.edit) { row.append(h("button", { class: "bchip", type: "button", onclick: e.go }, e.name)); return; }
+          if (chipEdit && chipEdit.key === e.key) { row.append(e.form()); return; }
+          row.append(h("span", { class: "bchip editchip" },
+            h("button", { class: "nmbtn", type: "button", "aria-label": "Bearbeiten: " + e.name, onclick: function () { chipEdit = { key: e.key }; renderShop(); } }, e.name),
+            h("button", { class: "x", type: "button", "aria-label": e.name + " entfernen", onclick: function () { chipEdit = null; e.del(); } }, "×")));
+        });
         wrap.append(row);
       });
       return wrap;
+    };
+    var chipForm = function (name, withAisle, aisle0, onSave) {
+      var n = h("input", { type: "text", maxlength: "60", value: name, "aria-label": "Name", required: true });
+      var a = null;
+      if (withAisle) { a = h("select", { "aria-label": "Gang im Laden" }); AISLES.forEach(function (x) { a.append(h("option", { value: x, selected: x === aisle0 }, x)); }); }
+      var save = function () { var v = n.value.trim(); if (!v) { toast("Es braucht einen Namen."); return; } chipEdit = null; onSave(v, a ? a.value : ""); renderShop(); };
+      n.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); save(); } });
+      var f = h("div", { class: "chipform" }, n);
+      if (a) f.append(a);
+      f.append(h("button", { class: "linkbtn", type: "button", onclick: save }, "Speichern"), h("button", { class: "linkbtn", type: "button", onclick: function () { chipEdit = null; renderShop(); } }, "Abbrechen"));
+      return f;
     };
     /* Vorrat: alles, was im Kochbuch als "Immer da" markiert ist; hier die Dinge dieses Ladens */
     var stockBy = {};
@@ -846,14 +913,20 @@
     var hasStock = stockList.length > 0 || otherStock.length > 0;
     var favEl = null, stockEl = null;
     if (favs.length) {
-      favEl = chipsByAisle(favs.map(function (x) { return { name: x.n, aisle: AISLES.indexOf(x.a) >= 0 ? x.a : guessAisle(x.n), go: function () { putMulti(st.id, x.n, x.a); } }; }), "aislechips favrow");
+      favEl = chipsByAisle(favs.map(function (x) { return { name: x.n, aisle: AISLES.indexOf(x.a) >= 0 ? x.a : guessAisle(x.n), go: function () { putMulti(st.id, x.n, x.a); },
+        key: "fav:" + x.n, edit: true,
+        del: function () { histChange(st.id, x.n, ""); },
+        form: function () { return chipForm(x.n, true, AISLES.indexOf(x.a) >= 0 ? x.a : guessAisle(x.n), function (v, ai) { histChange(st.id, x.n, v, ai); }); } }; }), "aislechips favrow");
     }
     if (hasStock) {
       stockEl = h("details", { class: "stockbox" }, h("summary", null, "Vorrat", h("span", { class: "n" }, String(stockFree.length))));
-      stockEl.open = lsGet("pp-stockopen") === "1";
-      stockEl.addEventListener("toggle", function () { lsSet("pp-stockopen", stockEl.open ? "1" : "0"); });
+      stockEl.open = doneEdit || lsGet("pp-stockopen") === "1";
+      stockEl.addEventListener("toggle", function () { if (!doneEdit) lsSet("pp-stockopen", stockEl.open ? "1" : "0"); });
       if (stockFree.length) {
-        stockEl.append(chipsByAisle(stockFree.map(function (n) { return { name: n, aisle: guessAisle(n), go: function () { putMulti(st.id, n); } }; })));
+        stockEl.append(chipsByAisle(stockFree.map(function (n) { return { name: n, aisle: guessAisle(n), go: function () { putMulti(st.id, n); },
+          key: "stock:" + n, edit: true,
+          del: function () { stockChange(n, ""); toast("„" + n + "“ ist nicht mehr als „Immer da“ markiert."); },
+          form: function () { return chipForm(n, false, "", function (v) { stockChange(n, v); }); } }; })));
       } else if (stockList.length) stockEl.append(h("p", { class: "hint" }, "Alles aus dem Vorrat steht schon auf der Liste."));
       else stockEl.append(h("p", { class: "hint" }, "Für " + st.name + " ist im Kochbuch nichts als „Immer da“ eingetragen."));
       if (otherStock.length) stockEl.append(h("p", { class: "hint" }, "Mehr Vorrat bei: " + otherStock.join(", ") + "."));
@@ -891,6 +964,9 @@
       }
     }
 
+    if (done.length || favEl || stockEl) {
+      body.append(h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: function () { doneEdit = !doneEdit; editItemId = null; chipEdit = null; renderShop(); } }, doneEdit ? "Fertig" : "Einzelne bearbeiten")));
+    }
     if (done.length || favEl) {
       var chips = null;
       if (!done.length) chips = null;
@@ -917,7 +993,6 @@
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmClean = false; renderShop(); } }, "Abbrechen"));
       } else {
         cleanRow.append(
-          h("button", { class: "linkbtn", type: "button", onclick: function () { doneEdit = !doneEdit; editItemId = null; renderShop(); } }, doneEdit ? "Fertig" : "Einzelne bearbeiten"),
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmClean = true; renderShop(); } }, "Alle aufräumen"));
       }
       body.append(h("section", { class: "group" },
@@ -2821,7 +2896,9 @@
     if (!v.trim()) return;
     addItems(v);
     $("quickname").value = "";
+    updateQuick();
   });
+  $("quickname").addEventListener("input", updateQuick);
   $("storeform").addEventListener("submit", function (e) { e.preventDefault(); addStore($("newstore").value); });
   $("storecancel").addEventListener("click", function () { addingStore = false; $("newstore").value = ""; renderShop(); });
   $("view").addEventListener("click", function (e) {
