@@ -1732,13 +1732,15 @@
   var slotFilters = {}, weekRoll = {}, weekRollFor = null;
   function sfKey(ds, slot) { return ((dn(ds) + 3) % 7) + "|" + slot; }
   function getSF(ds, slot) {
-    var f = slotFilters[sfKey(ds, slot)] || {};
-    return { tm: Number(f.tm) || 0, em: Number(f.em) || 0, l: Array.isArray(f.l) ? f.l.filter(function (x) { return labelDefs.some(function (l) { return l.id === x; }); }) : [] };
+    var f0 = slotFilters[sfKey(ds, slot)], f = f0 || {};
+    return { on: !!f0 && f0.on !== false, tm: Number(f.tm) || 0, em: Number(f.em) || 0, l: Array.isArray(f.l) ? f.l.filter(function (x) { return labelDefs.some(function (l) { return l.id === x; }); }) : [] };
   }
   function sfActive(f) { return !!(f.tm || f.em || f.l.length); }
   function setSF(ds, slot, f) {
     var k = sfKey(ds, slot);
-    if (sfActive(f)) slotFilters[k] = { tm: f.tm, em: f.em, l: f.l.slice() }; else delete slotFilters[k];
+    var prev = slotFilters[k], on = f.on === undefined ? (!!prev && prev.on !== false) : !!f.on;
+    if (!prev && sfActive(f)) on = true;
+    if (on || sfActive(f)) slotFilters[k] = { on: on, tm: f.tm, em: f.em, l: f.l.slice() }; else delete slotFilters[k];
     if (!db) return;
     db.doc("plan/_filters").set({ map: slotFilters, at: Date.now() }).catch(writeFail);
   }
@@ -1758,7 +1760,7 @@
       var st = slotsOf(plan[ds]);
       SLOTS.forEach(function (sl) {
         if (st[sl].length || st["out" + capOf(sl)]) return;
-        if (sfActive(getSF(ds, sl))) out.push({ ds: ds, slot: sl, key: ds + "|" + sl });
+        if (getSF(ds, sl).on) out.push({ ds: ds, slot: sl, key: ds + "|" + sl });
       });
     }
     return out;
@@ -1780,17 +1782,83 @@
       if (pick) used[pick.id] = true;
     });
   }
+  var planOpen = false, planEdit = null;
+  function sfSummary(f) {
+    var ls = labelDefs.filter(function (l) { return f.l.indexOf(l.id) >= 0; }).map(function (l) { return l.emoji; }).join("");
+    var t = (f.em ? "⚡" + f.em + " " : "") + (f.tm ? "🕐" + f.tm + " " : "") + ls;
+    return t.trim() || "beliebig";
+  }
+  function planEditor(ds, slot) {
+    var f = getSF(ds, slot), box = h("div", { class: "filters planfilters" });
+    var put = function () { setSF(ds, slot, f); renderMeal(); };
+    box.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"), scaleInput("⚡", f.em, "Aufwand höchstens", function (n) { f.em = n; put(); })));
+    box.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Zeit"), scaleInput("🕐", f.tm, "Zeit höchstens", function (n) { f.tm = n; put(); })));
+    if (labelDefs.length) {
+      var lc = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
+      labelDefs.forEach(function (l) {
+        var on = f.l.indexOf(l.id) >= 0;
+        lc.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () { f.l = on ? f.l.filter(function (x) { return x !== l.id; }) : f.l.concat([l.id]); put(); } }, l.emoji));
+      });
+      box.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc));
+    }
+    return box;
+  }
+  function planConfigEl(mon, today) {
+    var wrap = h("div", { class: "planconf" });
+    var setDays = function (wds) {
+      var ref = dnToStr(mon);
+      for (var i = 0; i < 7; i++) {
+        var ds = dnToStr(mon + i), on = wds.indexOf(i) >= 0;
+        SLOTS.forEach(function (sl) { var f = getSF(ds, sl); f.on = on; setSF(ds, sl, f); });
+      }
+      renderMeal();
+    };
+    wrap.append(h("div", { class: "bought" },
+      h("button", { class: "bchip", type: "button", onclick: function () { setDays([0, 1, 2, 3, 4, 5, 6]); } }, "Alle 7 Tage"),
+      h("button", { class: "bchip", type: "button", onclick: function () { setDays([0, 1, 2, 3, 4]); } }, "Mo–Fr"),
+      h("button", { class: "bchip", type: "button", onclick: function () { setDays([]); } }, "Keine")));
+    for (var i = 0; i < 7; i++) (function (n) {
+      var ds = dnToStr(n), fl = getSF(ds, "lunch"), fd = getSF(ds, "dinner"), dayOn = fl.on || fd.on;
+      var card = h("div", { class: "plancard" + (dayOn ? " on" : "") + (n < today ? " past" : "") });
+      var chk = h("button", { class: "pchk" + (dayOn ? " on" : ""), type: "button", role: "checkbox", "aria-checked": String(dayOn), "aria-label": WD[(n + 3) % 7] + " einplanen", onclick: function () {
+        SLOTS.forEach(function (sl) { var f = getSF(ds, sl); f.on = !dayOn; setSF(ds, sl, f); }); renderMeal();
+      } }, dayOn ? "✓" : "");
+      var head = h("div", { class: "planhead" }, chk, h("b", null, WD[(n + 3) % 7] + " " + dayLabel(n)));
+      var pills = h("span", { class: "planpills" });
+      [["lunch", "Mittag", fl], ["dinner", "Abend", fd]].forEach(function (x) {
+        pills.append(h("button", { class: "ppill" + (x[2].on ? " on" : ""), type: "button", "aria-pressed": String(x[2].on), onclick: function () { var f = getSF(ds, x[0]); f.on = !f.on; setSF(ds, x[0], f); renderMeal(); } }, x[1]));
+      });
+      head.append(pills);
+      card.append(head);
+      if (dayOn) {
+        var crit = h("div", { class: "plancrit" });
+        [["lunch", "M", fl], ["dinner", "A", fd]].forEach(function (x) {
+          if (!x[2].on) return;
+          var id = ds + "|" + x[0], open = planEdit === id;
+          crit.append(h("button", { class: "linkbtn pcbtn" + (open ? " on" : ""), type: "button", "aria-expanded": String(open), onclick: function () { planEdit = open ? null : id; renderMeal(); } }, x[1] + ": " + sfSummary(x[2])));
+        });
+        card.append(crit);
+        [["lunch", fl], ["dinner", fd]].forEach(function (x) { if (x[1].on && planEdit === ds + "|" + x[0]) card.append(planEditor(ds, x[0])); });
+      }
+      wrap.append(card);
+    })(mon + i);
+    return wrap;
+  }
   function weekRollEl(mon, today) {
+    if (mon + 6 < today) return null;
     var targets = rollTargets(mon, today);
     if (weekRollFor !== mon) { weekRoll = {}; weekRollFor = mon; }
     Object.keys(weekRoll).forEach(function (k) { if (!targets.some(function (t) { return t.key === k; })) delete weekRoll[k]; });
     var props = targets.filter(function (t) { return weekRoll[t.key]; });
-    if (!targets.length) return null;
     var wrap = h("div", { class: "panel weekroll" });
     if (!props.length) {
       wrap.append(h("div", { class: "cookhead" },
-        h("span", { class: "hint" }, targets.length + (targets.length === 1 ? " Mahlzeit hat" : " Mahlzeiten haben") + " gemerkte Filter"),
-        h("button", { class: "primary", type: "button", "aria-label": "Woche auswürfeln", onclick: function () { rollWeek(targets, {}); renderMeal(); } }, "🎲 Woche")));
+        h("b", null, "Woche planen"),
+        h("span", { class: "planbtns" },
+          h("button", { class: "linkbtn", type: "button", "aria-expanded": String(planOpen), onclick: function () { planOpen = !planOpen; renderMeal(); } }, planOpen ? "Zuklappen" : "Tage & Filter"),
+          targets.length ? h("button", { class: "primary", type: "button", "aria-label": "Woche auswürfeln", onclick: function () { rollWeek(targets, {}); renderMeal(); } }, "🎲 Woche") : null)));
+      if (!planOpen) wrap.append(h("p", { class: "hint" }, targets.length ? targets.length + (targets.length === 1 ? " Mahlzeit ist" : " Mahlzeiten sind") + " zum Auswürfeln eingeplant." : "Wähle unter „Tage & Filter“, für welche Tage und Mahlzeiten Vorschläge kommen sollen."));
+      else wrap.append(planConfigEl(mon, today));
       return wrap;
     }
     var rows = h("div", { class: "wrrows" });

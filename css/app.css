@@ -691,3 +691,19 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .chipform .btns { display: flex; gap: 6px; }
 .shopeditrow { display: flex; justify-content: flex-end; margin: -4px 0 -2px; }
 .shopeditrow .linkbtn { min-height: 32px; padding: 4px 12px; font-size: .85rem; }
+
+.planbtns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.planconf { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.plancard { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.plancard.on { border-color: var(--accent); }
+.plancard.past { opacity: .6; }
+.planhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pchk { width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--line-strong); background: transparent; color: #fff; font-weight: 700; line-height: 1; padding: 0; flex: 0 0 auto; }
+.pchk.on { background: var(--accent); border-color: var(--accent); }
+.planpills { margin-left: auto; display: flex; gap: 6px; }
+.ppill { border: 1px solid var(--line-strong); background: transparent; border-radius: 999px; padding: 6px 12px; min-height: 36px; font-size: .9rem; color: var(--ink); }
+.ppill.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.plancrit { display: flex; gap: 6px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 6px; }
+.pcbtn { min-height: 34px; font-size: .85rem; }
+.pcbtn.on { border-color: var(--accent); }
+.planfilters { margin-top: 2px; }
