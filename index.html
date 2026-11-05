@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
-<link rel="stylesheet" href="css/app.css?v=40">
+<link rel="stylesheet" href="css/app.css?v=41">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -261,10 +261,8 @@
       <div class="seg viewseg" id="cookseg" role="group" aria-label="Ansicht Kochbuch">
         <button type="button" data-v="menu" aria-pressed="true">Speisekarte</button>
         <button type="button" data-v="stats" aria-pressed="false">Statistik</button>
-        <button type="button" data-v="labels" aria-pressed="false">Labels</button>
       </div>
       <div class="col" id="cookstats" hidden></div>
-      <div class="col" id="cooklabels" hidden></div>
       <div class="cookhead" id="cookheadrow">
         <p class="headline" id="cookhead">Kochbuch wird geladen …</p>
         <button class="primary" type="button" id="newrecipe">+ Gericht</button>
@@ -424,7 +422,10 @@
   </section>
 
   <section class="col" id="spendview" hidden>
-    <p class="headline" id="spendhead" aria-live="polite">Ausgaben werden geladen …</p>
+    <div class="cookhead" id="spendheadrow">
+      <p class="headline" id="spendhead" aria-live="polite">Ausgaben werden geladen …</p>
+      <button class="primary" type="button" id="spendopen" hidden>+ Ausgabe</button>
+    </div>
     <div id="spendbanner"></div>
     <div class="row" id="budgetbar" hidden>
       <select id="budgetsel" aria-label="Budget wählen"></select>
@@ -457,8 +458,6 @@
     </form>
 
     <div class="col" id="spendsum"></div>
-
-    <div class="row" id="spendaddrow" hidden><button class="primary" type="button" id="spendopen">+ Ausgabe</button></div>
 
     <form class="panel" id="spendform" autocomplete="off" hidden>
       <h2>Ausgabe eintragen</h2>
@@ -522,6 +521,8 @@
         <button class="linkbtn" type="button" id="doexample">Beispieldaten laden</button>
         <button class="linkbtn" type="button" id="dologout">Abmelden</button>
       </div>
+      <h3 class="subh">Labels für Gerichte</h3>
+      <div class="col" id="cooklabels"></div>
       <h3 class="subh">Farben für F und C</h3>
       <div id="colorbox" class="colorbox"></div>
       <div id="setstatus" class="meta" role="status"></div>
@@ -534,7 +535,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=40"></script>
-<script src="js/app.js?v=40"></script>
+<script src="js/store-supabase.js?v=41"></script>
+<script src="js/app.js?v=41"></script>
 </body>
 </html>

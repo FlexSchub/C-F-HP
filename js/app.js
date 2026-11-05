@@ -20,7 +20,7 @@
   var confirmDel = null;
   var togetherAsk = null;
   var newFollow = {};
-  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookTm = 0, cookEm = 0, openDish = {}, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
+  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookTm = 0, cookEm = 0, openDish = {}, pickFOpen = false, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -1272,12 +1272,12 @@
   }
 
   function renderCook() {
+    renderLabels();
     var box = $("cookmain");
     box.replaceChildren();
     if (recipes === null) { $("cookhead").textContent = "Kochbuch wird geladen …"; $("pickbar").hidden = true; return; }
-    var statsOn = cookTab === "stats", labelsOn = cookTab === "labels";
+    var statsOn = cookTab === "stats", labelsOn = false;
     $("cookstats").hidden = !statsOn;
-    $("cooklabels").hidden = !labelsOn;
     $("cookheadrow").hidden = statsOn || labelsOn;
     $("cooksearchrow").hidden = statsOn || labelsOn || !recipes.length;
     box.hidden = statsOn || labelsOn;
@@ -1677,7 +1677,9 @@
           });
         };
         qIn.addEventListener("input", function (e) { pickF.q = e.target.value; fill(); });
-        box.append(h("div", { class: "searchrow" }, qIn));
+        var nAct = (pickF.tm ? 1 : 0) + (pickF.em ? 1 : 0) + pickF.l.length;
+        box.append(h("div", { class: "searchrow" }, qIn,
+          h("button", { class: "linkbtn fbtn" + (pickFOpen || nAct ? " on" : ""), type: "button", "aria-expanded": String(pickFOpen), "aria-label": "Filter für Zeit, Aufwand und Label", onclick: function () { pickFOpen = !pickFOpen; renderMeal(); } }, "⚙ Filter" + (nAct ? " · " + nAct : ""))));
         var fr = h("div", { class: "filters" });
         fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Zeit"), scaleInput("🕐", pickF.tm, "Zeit höchstens", function (n) { pickF.tm = n; renderMeal(); }), h("span", { class: "hint" }, pickF.tm ? "bis " + TIME_CATS[pickF.tm - 1].short : "egal")));
         fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"), scaleInput("⚡", pickF.em, "Aufwand höchstens", function (n) { pickF.em = n; renderMeal(); }), h("span", { class: "hint" }, pickF.em ? "höchstens " + EFFORT_NAMES[pickF.em] : "egal")));
@@ -1692,7 +1694,8 @@
           var actL = labelDefs.filter(function (l) { return pickF.l.indexOf(l.id) >= 0; });
           fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, actL.length ? actL.map(function (l) { return l.name; }).join(" oder ") : "egal")));
         }
-        box.append(fr, pk);
+        if (pickFOpen) box.append(fr);
+        box.append(pk);
         fill();
       }
     }
@@ -2581,7 +2584,7 @@
   var spendOpen = false;
   function renderSpend() {
     var head = $("spendhead");
-    var parts = ["budgetbar", "budgetform", "spendsum", "spendaddrow", "spendform", "spendlist", "spendcats"];
+    var parts = ["budgetbar", "budgetform", "spendsum", "spendopen", "spendform", "spendlist", "spendcats"];
     function hideAll() { parts.forEach(function (id) { $(id).hidden = true; }); }
     var ban = $("spendbanner"); ban.replaceChildren();
     if (dbMissing) {
@@ -2610,12 +2613,12 @@
     sum.replaceChildren(); lst.replaceChildren(); cats.replaceChildren();
     if (!b) {
       head.textContent = "Noch kein Budget";
-      $("spendform").hidden = true; $("spendaddrow").hidden = true; sum.hidden = true; lst.hidden = true; cats.hidden = true;
+      $("spendform").hidden = true; $("spendopen").hidden = true; sum.hidden = true; lst.hidden = true; cats.hidden = true;
       return;
     }
     sum.hidden = false; lst.hidden = false; cats.hidden = false;
     $("spendform").hidden = !!budgetForm || !spendOpen;
-    $("spendaddrow").hidden = !!budgetForm || spendOpen;
+    $("spendopen").hidden = !!budgetForm || spendOpen;
 
     var mine = spends.filter(function (s) { return s.budget === b.id; });
     var spent = mine.reduce(function (a, s) { return a + (s.amount || 0); }, 0);
