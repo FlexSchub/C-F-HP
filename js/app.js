@@ -1279,6 +1279,7 @@
     if (recipes === null) { $("cookhead").textContent = "Kochbuch wird geladen …"; $("pickbar").hidden = true; return; }
     var statsOn = cookTab === "stats", labelsOn = false;
     $("cookstats").hidden = !statsOn;
+    $("labelsbox").hidden = statsOn || recipes === null;
     $("cookheadrow").hidden = statsOn || labelsOn;
     $("cooksearchrow").hidden = statsOn || labelsOn || !recipes.length;
     box.hidden = statsOn || labelsOn;
