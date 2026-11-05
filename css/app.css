@@ -680,3 +680,14 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .wrname { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .wrok { color: var(--accent); border-color: var(--accent); font-weight: 700; }
 .fset { margin-left: 6px; font-size: .8rem; color: var(--accent); }
+/* Chips bearbeiten: kompakter und aufgeräumt */
+.editchip { min-height: 38px; padding: 0 4px 0 12px; border-style: solid; border-color: var(--line-strong); }
+.editchip .nmbtn { padding: 4px 2px; font-size: .95rem; }
+.editchip .x { padding: 4px 8px; min-height: 0; }
+.chipform { flex: 1 1 100%; flex-direction: row; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px; margin: 2px 0; }
+.chipform input, .chipform select { background: var(--bg); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 10px; padding: 8px 10px; min-height: 42px; font-size: 1rem; min-width: 0; width: 100%; box-sizing: border-box; }
+.chipform input { grid-column: 1 / -1; }
+.chipform .linkbtn { min-height: 42px; }
+.chipform .btns { display: flex; gap: 6px; }
+.shopeditrow { display: flex; justify-content: flex-end; margin: -4px 0 -2px; }
+.shopeditrow .linkbtn { min-height: 32px; padding: 4px 12px; font-size: .85rem; }

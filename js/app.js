@@ -894,8 +894,9 @@
       var save = function () { var v = n.value.trim(); if (!v) { toast("Es braucht einen Namen."); return; } chipEdit = null; onSave(v, a ? a.value : ""); renderShop(); };
       n.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); save(); } });
       var f = h("div", { class: "chipform" }, n);
-      if (a) f.append(a);
-      f.append(h("button", { class: "linkbtn", type: "button", onclick: save }, "Speichern"), h("button", { class: "linkbtn", type: "button", onclick: function () { chipEdit = null; renderShop(); } }, "Abbrechen"));
+      var bt = h("div", { class: "btns" }, h("button", { class: "linkbtn", type: "button", onclick: save }, "Speichern"), h("button", { class: "linkbtn", type: "button", onclick: function () { chipEdit = null; renderShop(); } }, "Abbrechen"));
+      if (a) f.append(a); else f.append(h("span"));
+      f.append(bt);
       return f;
     };
     /* Vorrat: alles, was im Kochbuch als "Immer da" markiert ist; hier die Dinge dieses Ladens */
@@ -965,7 +966,7 @@
     }
 
     if (done.length || favEl || stockEl) {
-      body.append(h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: function () { doneEdit = !doneEdit; editItemId = null; chipEdit = null; renderShop(); } }, doneEdit ? "Fertig" : "Einzelne bearbeiten")));
+      body.append(h("div", { class: "shopeditrow" }, h("button", { class: "linkbtn", type: "button", onclick: function () { doneEdit = !doneEdit; editItemId = null; chipEdit = null; renderShop(); } }, doneEdit ? "Fertig" : "Einzelne bearbeiten")));
     }
     if (done.length || favEl) {
       var chips = null;
