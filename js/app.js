@@ -20,7 +20,7 @@
   var confirmDel = null;
   var togetherAsk = null;
   var newFollow = {};
-  var cookQ = "", cookL = [], cookTm = 0, cookEm = 0, openDish = {}, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
+  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookTm = 0, cookEm = 0, openDish = {}, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -817,7 +817,20 @@
     var mine = items.filter(function (i) { return i.store === st.id; });
     var open = mine.filter(function (i) { return !i.done; }).sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
     var openKeys = {}; open.forEach(function (i) { openKeys[String(i.name).toLowerCase()] = true; });
-    var favs = (Array.isArray(st.hist) ? st.hist : []).filter(function (x) { return x && x.n && !openKeys[String(x.n).toLowerCase()]; }).slice(0, 10);
+    var favs = (Array.isArray(st.hist) ? st.hist : []).filter(function (x) { return x && x.n && !openKeys[String(x.n).toLowerCase()]; }).slice(0, 30);
+    /* Chips nach Gang im Markt gruppieren (Apfel unter Obst & Gemüse) */
+    var chipsByAisle = function (entries, cls) {
+      var wrap = h("div", { class: cls || "aislechips" });
+      AISLES.forEach(function (ai) {
+        var part = entries.filter(function (e) { return e.aisle === ai; });
+        if (!part.length) return;
+        wrap.append(h("p", { class: "slabel2" }, ai));
+        var row = h("div", { class: "bought" });
+        part.forEach(function (e) { row.append(h("button", { class: "bchip", type: "button", onclick: e.go }, e.name)); });
+        wrap.append(row);
+      });
+      return wrap;
+    };
     /* Vorrat: alles, was im Kochbuch als "Immer da" markiert ist; hier die Dinge dieses Ladens */
     var stockBy = {};
     (recipes || []).forEach(function (r) { (r.ingredients || []).forEach(function (g) {
@@ -831,27 +844,19 @@
     var stockFree = stockList.filter(function (n) { return !openKeys[n.toLowerCase()]; });
     var otherStock = Object.keys(stockBy).filter(function (sid) { return sid !== st.id && storeName(sid); }).map(function (sid) { return storeName(sid) + " (" + stockBy[sid].list.length + ")"; });
     var hasStock = stockList.length > 0 || otherStock.length > 0;
-    if (favs.length || hasStock) {
-      var cols = h("div", { class: "shopcols" });
-      if (favs.length) {
-        var fc = h("div", { class: "bought" });
-        favs.forEach(function (x) { fc.append(h("button", { class: "bchip", type: "button", onclick: function () { putMulti(st.id, x.n, x.a); } }, x.n)); });
-        cols.append(h("section", { class: "group" }, h("h2", null, "Oft gekauft"), fc));
-      }
-      if (hasStock) {
-        var sec = h("details", { class: "stockbox" }, h("summary", null, "Vorrat", h("span", { class: "n" }, String(stockFree.length))));
-        sec.open = lsGet("pp-stockopen") === "1";
-        sec.addEventListener("toggle", function () { lsSet("pp-stockopen", sec.open ? "1" : "0"); });
-        if (stockFree.length) {
-          var sc = h("div", { class: "bought" });
-          stockFree.forEach(function (n) { sc.append(h("button", { class: "bchip", type: "button", onclick: function () { putMulti(st.id, n); } }, n)); });
-          sec.append(sc);
-        } else if (stockList.length) sec.append(h("p", { class: "hint" }, "Alles aus dem Vorrat steht schon auf der Liste."));
-        else sec.append(h("p", { class: "hint" }, "Für " + st.name + " ist im Kochbuch nichts als „Immer da“ eingetragen."));
-        if (otherStock.length) sec.append(h("p", { class: "hint" }, "Mehr Vorrat bei: " + otherStock.join(", ") + "."));
-        cols.append(sec);
-      }
-      body.append(cols);
+    var favEl = null, stockEl = null;
+    if (favs.length) {
+      favEl = chipsByAisle(favs.map(function (x) { return { name: x.n, aisle: AISLES.indexOf(x.a) >= 0 ? x.a : guessAisle(x.n), go: function () { putMulti(st.id, x.n, x.a); } }; }), "aislechips favrow");
+    }
+    if (hasStock) {
+      stockEl = h("details", { class: "stockbox" }, h("summary", null, "Vorrat", h("span", { class: "n" }, String(stockFree.length))));
+      stockEl.open = lsGet("pp-stockopen") === "1";
+      stockEl.addEventListener("toggle", function () { lsSet("pp-stockopen", stockEl.open ? "1" : "0"); });
+      if (stockFree.length) {
+        stockEl.append(chipsByAisle(stockFree.map(function (n) { return { name: n, aisle: guessAisle(n), go: function () { putMulti(st.id, n); } }; })));
+      } else if (stockList.length) stockEl.append(h("p", { class: "hint" }, "Alles aus dem Vorrat steht schon auf der Liste."));
+      else stockEl.append(h("p", { class: "hint" }, "Für " + st.name + " ist im Kochbuch nichts als „Immer da“ eingetragen."));
+      if (otherStock.length) stockEl.append(h("p", { class: "hint" }, "Mehr Vorrat bei: " + otherStock.join(", ") + "."));
     }
     var done = mine.filter(function (i) { return i.done; }).sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); });
 
@@ -886,9 +891,10 @@
       }
     }
 
-    if (done.length) {
-      var chips;
-      if (doneEdit) {
+    if (done.length || favEl) {
+      var chips = null;
+      if (!done.length) chips = null;
+      else if (doneEdit) {
         chips = h("ul", { class: "items" });
         done.forEach(function (it) {
           var chk = h("button", { class: "check", type: "button", "aria-label": "Wieder auf die Liste: " + it.name, title: "Wieder auf die Liste", onclick: function () { setDone(it, false); } });
@@ -904,7 +910,8 @@
         done.forEach(function (it) { chips.append(h("button", { class: "bchip", type: "button", onclick: function () { setDone(it, false); } }, it.name)); });
       }
       var cleanRow = h("div", { class: "row" });
-      if (confirmClean) {
+      if (!done.length) cleanRow = null;
+      else if (confirmClean) {
         cleanRow.append(
           h("button", { class: "linkbtn danger", type: "button", onclick: function () { cleanBought(st); } }, "Ja, alle löschen"),
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmClean = false; renderShop(); } }, "Abbrechen"));
@@ -914,9 +921,12 @@
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmClean = true; renderShop(); } }, "Alle aufräumen"));
       }
       body.append(h("section", { class: "group" },
-        h("h2", null, "Schon gekauft", h("span", { class: "n" }, String(done.length))),
+        done.length ? h("h2", null, "Schon gekauft", h("span", { class: "n" }, String(done.length))) : h("h2", null, "Oft gekauft"),
+        favEl && done.length ? h("p", { class: "slabel2" }, "Oft gekauft") : null, favEl,
+        favEl && done.length ? h("p", { class: "slabel2" }, "Heute gekauft") : null,
         chips, cleanRow));
     }
+    if (stockEl) body.append(stockEl);
 
     var delRow = h("div", { class: "row" });
     if (confirmStoreDel) {
@@ -1558,30 +1568,60 @@
         } }, "×")));
     });
     if (chips.children.length) box.append(chips);
-    else if (pickDay !== key + "|dish" && !/\|(out|snack|prep)$/.test(String(pickDay))) box.append(h("p", { class: "noneyet" }, "Noch nichts geplant"));
+    else if (pickDay !== key + "|dish" && !/\|out$/.test(String(pickDay))) box.append(h("p", { class: "noneyet" }, "Noch nichts geplant"));
 
     if (pickDay === key + "|dish") {
-      var list = (recipes || []).slice().sort(function (a, b) {
-        return (picked[b.id] ? 1 : 0) - (picked[a.id] ? 1 : 0) || String(a.name).localeCompare(String(b.name), "de");
-      });
-      if (!list.length) box.append(h("p", { class: "noneyet" }, "Lege zuerst im Kochbuch ein Gericht an."));
+      if (!(recipes || []).length) box.append(h("p", { class: "noneyet" }, "Lege zuerst im Kochbuch ein Gericht an."));
       else {
+        var qIn = h("input", { type: "search", maxlength: "60", autocomplete: "off", placeholder: "Gericht, Zutat oder Label suchen …", "aria-label": "Gericht suchen", value: pickF.q });
         var pk = h("div", { class: "picker" });
-        list.forEach(function (r) {
-          pk.append(h("button", { class: "bchip" + (picked[r.id] ? " sel" : ""), type: "button", onclick: function () {
-            pickDay = null;
-            var cur = slotsOf(plan[ds]);
-            if (cur[slot].some(function (d) { return d.id === r.id; })) { renderMeal(); return; }
-            cur[slot] = cur[slot].concat([{ id: r.id, name: r.name }]);
-            cur["out" + Cap] = false; cur["note" + Cap] = ""; cur["listed" + Cap] = false;
-            saveDay(ds, cur);
-            renderMeal();
-          } }, r.name + (picked[r.id] ? " · gewählt" : "")));
-        });
-        box.append(pk);
+        var fill = function () {
+          pk.replaceChildren();
+          var q = pickF.q.trim().toLowerCase(), ls = pickF.l.filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
+          var res = (recipes || []).filter(function (r) {
+            var c = timeCat(r.minutes), e = Math.round(Number(r.effort)) || 0;
+            if (pickF.tm && !(c >= 1 && c <= pickF.tm)) return false;
+            if (pickF.em && !(e >= 1 && e <= pickF.em)) return false;
+            if (ls.length && !(Array.isArray(r.labels) && ls.some(function (id) { return r.labels.indexOf(id) >= 0; }))) return false;
+            if (!q) return true;
+            var hay = [r.name].concat((r.ingredients || []).map(function (g) { return g.name; }), labelsOf(r).map(function (l) { return l.name; })).join(" ").toLowerCase();
+            return q.split(/\s+/).every(function (w) { return hay.indexOf(w) >= 0; });
+          }).sort(function (x, y) { return String(x.name).localeCompare(String(y.name), "de"); });
+          if (!res.length) pk.append(h("p", { class: "noneyet" }, "Kein Gericht passt. Ändere die Suche oder lockere die Filter."));
+          res.forEach(function (r) {
+            var em = labelsOf(r).map(function (l) { return l.emoji; }).join("");
+            pk.append(h("button", { class: "bchip", type: "button", onclick: function () {
+              pickDay = null;
+              var cur = slotsOf(plan[ds]);
+              if (cur[slot].some(function (d) { return d.id === r.id; })) { renderMeal(); return; }
+              cur[slot] = cur[slot].concat([{ id: r.id, name: r.name }]);
+              cur["out" + Cap] = false; cur["note" + Cap] = ""; cur["listed" + Cap] = false;
+              saveDay(ds, cur);
+              renderMeal();
+            } }, r.name + (em ? " " + em : "")));
+          });
+        };
+        qIn.addEventListener("input", function (e) { pickF.q = e.target.value; fill(); });
+        box.append(h("div", { class: "searchrow" }, qIn));
+        var fr = h("div", { class: "filters" });
+        fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Zeit"), scaleInput("🕐", pickF.tm, "Zeit höchstens", function (n) { pickF.tm = n; renderMeal(); }), h("span", { class: "hint" }, pickF.tm ? "bis " + TIME_CATS[pickF.tm - 1].short : "egal")));
+        fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"), scaleInput("⚡", pickF.em, "Aufwand höchstens", function (n) { pickF.em = n; renderMeal(); }), h("span", { class: "hint" }, pickF.em ? "höchstens " + EFFORT_NAMES[pickF.em] : "egal")));
+        if (labelDefs.length) {
+          var lc = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
+          labelDefs.forEach(function (l) {
+            var on = pickF.l.indexOf(l.id) >= 0;
+            lc.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () {
+              pickF.l = on ? pickF.l.filter(function (x) { return x !== l.id; }) : pickF.l.concat([l.id]); renderMeal();
+            } }, l.emoji));
+          });
+          var actL = labelDefs.filter(function (l) { return pickF.l.indexOf(l.id) >= 0; });
+          fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, actL.length ? actL.map(function (l) { return l.name; }).join(" oder ") : "egal")));
+        }
+        box.append(fr, pk);
+        fill();
       }
     }
-    var mk = ["out", "snack", "prep"].filter(function (k) { return pickDay === key + "|" + k; })[0];
+    var mk = ["out"].filter(function (k) { return pickDay === key + "|" + k; })[0];
     if (mk) {
       var ph = { out: "Wo? z. B. bei Oma (kann leer bleiben)", snack: "Was? z. B. Obst (kann leer bleiben)", prep: "Was wird vorbereitet? (kann leer bleiben)" }[mk];
       var inp = h("input", { type: "text", maxlength: "60", placeholder: ph, "aria-label": "Notiz zu " + MARK_NAMES[mk] });
@@ -1599,7 +1639,7 @@
     var open1 = pickDay === key + "|dish", open3 = pickDay === key + "|dice";
     acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open1 ? null : key + "|dish"; renderMeal(); } }, open1 ? "Schließen" : "+ Gericht"));
     acts.append(h("button", { class: "linkbtn", type: "button", "aria-label": SLOT_NAMES[slot] + " auswürfeln", onclick: function () { pickDay = open3 ? null : key + "|dice"; renderMeal(); } }, open3 ? "Schließen" : "🎲"));
-    if (!out) ["out", "snack", "prep"].forEach(function (k) {
+    if (!out) ["out"].forEach(function (k) {
       var o = pickDay === key + "|" + k;
       acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = o ? null : key + "|" + k; renderMeal(); } }, o ? "Schließen" : MARK_NAMES[k]));
     });
@@ -2463,9 +2503,10 @@
     box.append(h("div", { class: "panel" }, h("h2", null, "Nach Kategorie"), h("div", { class: "catwrap" }, svg, table)));
   }
 
+  var spendOpen = false;
   function renderSpend() {
     var head = $("spendhead");
-    var parts = ["budgetbar", "budgetform", "spendsum", "spendform", "spendlist", "spendcats"];
+    var parts = ["budgetbar", "budgetform", "spendsum", "spendaddrow", "spendform", "spendlist", "spendcats"];
     function hideAll() { parts.forEach(function (id) { $(id).hidden = true; }); }
     var ban = $("spendbanner"); ban.replaceChildren();
     if (dbMissing) {
@@ -2494,11 +2535,12 @@
     sum.replaceChildren(); lst.replaceChildren(); cats.replaceChildren();
     if (!b) {
       head.textContent = "Noch kein Budget";
-      $("spendform").hidden = true; sum.hidden = true; lst.hidden = true; cats.hidden = true;
+      $("spendform").hidden = true; $("spendaddrow").hidden = true; sum.hidden = true; lst.hidden = true; cats.hidden = true;
       return;
     }
     sum.hidden = false; lst.hidden = false; cats.hidden = false;
-    $("spendform").hidden = !!budgetForm;
+    $("spendform").hidden = !!budgetForm || !spendOpen;
+    $("spendaddrow").hidden = !!budgetForm || spendOpen;
 
     var mine = spends.filter(function (s) { return s.budget === b.id; });
     var spent = mine.reduce(function (a, s) { return a + (s.amount || 0); }, 0);
@@ -2556,7 +2598,7 @@
           h("button", { class: "x", type: "button", "aria-label": "Ausgabe löschen", onclick: function () { delSpend(s); } }, "×"),
           h("span", { class: "sm" }, meta)));
       });
-      lst.append(h("section", { class: "group" }, h("h2", null, "Ausgaben", h("span", { class: "n" }, String(mine.length))), ul));
+      lst.append(h("section", { class: "group" }, h("h2", null, "Ausgaben-Verlauf", h("span", { class: "n" }, String(mine.length))), ul));
     }
     renderCats(cats, mine, spent);
   }
@@ -2581,7 +2623,7 @@
       if (section === p[0] || (p[0] === "meal" && section === "cook")) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
     var curTab = $(section === "cook" ? "tabmeal" : "tab" + section);
-    if (curTab && $("menucur")) $("menucur").textContent = curTab.textContent;
+    if (curTab && $("h1name")) $("h1name").textContent = curTab.textContent;
     setMenu(false);
     if (section === "home") { try { renderHome(); } catch (e) {} }
   }
@@ -2612,7 +2654,7 @@
 
   $("tabhome").addEventListener("click", function () { goSection("home"); });
   $("tabputz").addEventListener("click", function () { section = "putz"; lsSet("pp-section", "putz"); syncControls(); });
-  $("tabshop").addEventListener("click", function () { section = "shop"; lsSet("pp-section", "shop"); syncControls(); });
+  $("tabshop").addEventListener("click", function () { section = "shop"; lsSet("pp-section", "shop"); syncControls(); renderShop(); });
   $("tabbus").addEventListener("click", function () { goSection("bus"); });
   $("tabcal").addEventListener("click", function () { section = "cal"; lsSet("pp-section", "cal"); syncControls(); renderCal(); });
   $("calprev").addEventListener("click", function () { calStep(-1); });
@@ -2711,6 +2753,8 @@
   }
   $("srepeat").addEventListener("change", syncRepeat);
   syncRepeat();
+  $("spendopen").addEventListener("click", function () { spendOpen = true; renderSpend(); $("samount").focus(); });
+  $("spendclose").addEventListener("click", function () { spendOpen = false; renderSpend(); });
   $("spendform").addEventListener("submit", function (e) {
     e.preventDefault();
     var b = resolveBudget();
@@ -2733,7 +2777,7 @@
     sref.set(doc).then(function () {
       $("samount").value = ""; $("swhat").value = ""; $("splace").value = ""; $("srepeat").value = ""; syncRepeat();
       toast(eur(cents) + " eingetragen." + (doc.repeat ? " Wiederholt sich " + repeatText(doc) + "." : ""));
-      $("samount").focus();
+      spendOpen = false; renderSpend();
     }).catch(writeFail);
   });
   ["mealseg", "cookmealseg"].forEach(function (id) {
@@ -3154,7 +3198,7 @@
     listen("log", function (a) { logs = a; renderStats(); });
     listen("stores", function (a) { stores = a; renderShop(); });
     listen("shop", function (a) { items = a; renderShop(); });
-    listen("recipes", function (a) { recipes = a; renderCook(); renderMeal(); });
+    listen("recipes", function (a) { recipes = a; renderCook(); renderMeal(); renderShop(); });
     listen("plan", function (a) {
       var m = {};
       a.forEach(function (d) { m[d.id] = d; });

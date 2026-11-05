@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
-<link rel="stylesheet" href="css/app.css?v=34">
+<link rel="stylesheet" href="css/app.css?v=39">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -52,11 +52,10 @@
   <header class="top">
     <div class="brand">
       <div class="brandtxt">
-        <h1>Putzplan <span class="amp">F &amp; C</span></h1>
+        <h1><span id="h1name">Heute</span> <span class="amp">F &amp; C</span></h1>
         <span class="date" id="today"></span>
       </div>
       <button class="menubtn" type="button" id="menubtn" aria-expanded="false" aria-controls="mainnav" aria-label="Menü öffnen">
-        <span class="menucur" id="menucur">Heute</span>
         <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
       </button>
     </div>
@@ -459,6 +458,8 @@
 
     <div class="col" id="spendsum"></div>
 
+    <div class="row" id="spendaddrow" hidden><button class="primary" type="button" id="spendopen">+ Ausgabe</button></div>
+
     <form class="panel" id="spendform" autocomplete="off" hidden>
       <h2>Ausgabe eintragen</h2>
       <div class="two">
@@ -501,11 +502,11 @@
           <option value="j">Jahre</option>
         </select>
       </div>
-      <div class="row"><button class="primary" type="submit">Ausgabe hinzufügen</button></div>
+      <div class="row"><button class="primary" type="submit">Ausgabe hinzufügen</button><button class="linkbtn" type="button" id="spendclose">Abbrechen</button></div>
     </form>
 
-    <div class="col" id="spendlist"></div>
     <div class="col" id="spendcats"></div>
+    <div class="col" id="spendlist"></div>
   </section>
   <details class="add" id="settingsbox">
     <summary>Einstellungen und Daten</summary>
@@ -533,7 +534,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=34"></script>
-<script src="js/app.js?v=34"></script>
+<script src="js/store-supabase.js?v=39"></script>
+<script src="js/app.js?v=39"></script>
 </body>
 </html>
