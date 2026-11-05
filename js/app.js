@@ -578,7 +578,7 @@
         : h("button", { class: "x", type: "button", "aria-label": "Erledigt-Eintrag entfernen: " + (l.task || "Aufgabe"), title: "Aus erledigt entfernen", onclick: function () { confirmLogDel = l.id; renderStats(); } }, "×");
       ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, (l.task || "Aufgabe") + (pointsOf(l) > 1 ? " · " + pointsOf(l) + " P." : "") + (l.together ? " · zusammen" : "")), h("span", { class: "rd" }, fmt(l.date)), del));
     });
-    box.append(h("div", { class: "panel" }, h("h2", null, "Zuletzt erledigt"), ul, h("p", { class: "hint" }, "Mit × nimmst du einen Eintrag wieder heraus, zum Beispiel wenn aus Versehen abgehakt wurde. Die Aufgabe, die Punkte und die Zählung gehen dann auf den Stand davor zurück.")));
+    box.append(h("div", { class: "panel" }, h("h2", null, "Zuletzt erledigt"), ul));
     box.append(h("p", { class: "foot" }, "Gezählt wird ab dem ersten Abhaken in dieser Version."));
   }
 
@@ -1347,8 +1347,7 @@
   function renderLabels() {
     var box = $("cooklabels");
     box.replaceChildren();
-    var panel = h("div", { class: "panel" }, h("h2", null, "Labels"),
-      h("p", { class: "hint" }, "Ein Label ist ein Emoji, das neben dem Gericht steht, zum Beispiel 🍔 für Fast Food. Welche Labels ein Gericht hat, stellst du beim Bearbeiten des Gerichts ein."));
+    var panel = h("div", { class: "panel" });
     if (!labelDefs.length) panel.append(h("p", { class: "noneyet" }, "Noch keine Labels. Tippe unten auf einen Vorschlag oder lege ein eigenes an."));
     labelDefs.forEach(function (l) {
       var nameIn = h("input", { type: "text", maxlength: "30", value: l.name, "aria-label": "Name des Labels " + l.emoji,
@@ -1381,10 +1380,10 @@
     LABEL_IDEAS.filter(function (x) { return !labelDefs.some(function (l) { return l.emoji === x[0]; }); }).forEach(function (x) {
       ideas.append(h("button", { class: "bchip", type: "button", onclick: function () { newLabel = { emoji: x[0], name: x[1] }; renderLabels(); } }, x[0] + " " + x[1]));
     });
-    box.append(h("div", { class: "panel" }, h("h2", null, "Neues Label"),
+    box.insertBefore(h("div", { class: "panel" }, h("h2", null, "Neues Label"),
       h("div", { class: "labelrow" }, emo, nm),
       h("div", { class: "row" }, h("button", { class: "primary", type: "button", onclick: add }, "Label anlegen")),
-      ideas.children.length ? h("span", { class: "hint" }, "Vorschläge zum Antippen:") : null, ideas.children.length ? ideas : null));
+      ideas.children.length ? h("span", { class: "hint" }, "Vorschläge zum Antippen:") : null, ideas.children.length ? ideas : null), box.firstChild);
   }
   function removeCookExamples() {
     confirmCookEx = false;
