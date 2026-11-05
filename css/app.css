@@ -707,3 +707,8 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .pcbtn { min-height: 34px; font-size: .85rem; }
 .pcbtn.on { border-color: var(--accent); }
 .planfilters { margin-top: 2px; }
+
+.dtog { background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; }
+.dtog .chev { color: var(--accent); font-size: .8rem; }
+.day.folded { padding-top: 8px; padding-bottom: 8px; align-items: center; }
+.dsum { font-size: .9rem; color: var(--muted); overflow-wrap: anywhere; }

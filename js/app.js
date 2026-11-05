@@ -1959,9 +1959,18 @@
     }
     return box;
   }
+  var mealOpen = {};
   function dayEl(n, ds, today) {
-    var cls = "day" + (n === today ? " today" : "") + (n < today ? " past" : "");
-    var lab = h("div", { class: "dlab" }, h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n)));
+    var open = mealOpen[ds] === undefined ? n >= today : mealOpen[ds];
+    var cls = "day" + (n === today ? " today" : "") + (n < today ? " past" : "") + (open ? "" : " folded");
+    var lab = h("button", { class: "dlab dtog", type: "button", "aria-expanded": String(open), "aria-label": WD[(n + 3) % 7] + " " + dayLabel(n) + (open ? " zuklappen" : " aufklappen"), onclick: function () { mealOpen[ds] = !open; renderMeal(); } },
+      h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n)), h("span", { class: "chev", "aria-hidden": "true" }, open ? "▾" : "▸"));
+    if (!open) {
+      var st = slotsOf(plan[ds]), names = st.lunch.concat(st.dinner).map(function (d) { return d.name; });
+      var out = (st.outLunch ? 1 : 0) + (st.outDinner ? 1 : 0);
+      var txt = names.length ? names.join(" · ") : out ? "Auswärts" : "nichts geplant";
+      return h("div", { class: cls }, lab, h("div", { class: "dmeals dsum" }, txt));
+    }
     return h("div", { class: cls }, lab, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
   }
   function renderMeal() {
