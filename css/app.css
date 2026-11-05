@@ -672,3 +672,11 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .slot .fbtn { flex: 0 0 auto; white-space: nowrap; padding: 6px 10px; min-height: 48px; }
 .slot .fbtn.on { border-color: var(--accent); }
 .picker .bchip { max-width: 100%; }
+
+.weekroll { padding: 10px 12px; }
+.wrrows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.wrrow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wrwhen { flex: 0 0 4.6rem; font-size: .8rem; font-weight: 600; color: var(--muted); }
+.wrname { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.wrok { color: var(--accent); border-color: var(--accent); font-weight: 700; }
+.fset { margin-left: 6px; font-size: .8rem; color: var(--accent); }

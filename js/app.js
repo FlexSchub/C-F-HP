@@ -1624,7 +1624,7 @@
     var key = ds + "|" + slot;
     var menuOpen = !!pickDay && String(pickDay).indexOf(key + "|") === 0;
     var box = h("div", { class: "slot" }, h("div", { class: "slabel" },
-      h("button", { class: "slotbtn", type: "button", "aria-expanded": String(menuOpen), onclick: function () { pickDay = menuOpen ? null : key + "|menu"; renderMeal(); } }, SLOT_NAMES[slot], h("span", { class: "chev", "aria-hidden": "true" }, menuOpen ? "▾" : "▸")), dishes.length && st["listed" + Cap] ? h("span", { class: "listed", title: "Zutaten sind auf den Einkaufslisten" }, " ✓ Zutaten geprüft") : null));
+      h("button", { class: "slotbtn", type: "button", "aria-expanded": String(menuOpen), onclick: function () { pickDay = menuOpen ? null : key + "|menu"; renderMeal(); } }, SLOT_NAMES[slot], h("span", { class: "chev", "aria-hidden": "true" }, menuOpen ? "▾" : "▸")), sfActive(getSF(ds, slot)) ? h("span", { class: "fset", title: "Gemerkte Filter für diesen Wochentag" }, "⚙") : null, dishes.length && st["listed" + Cap] ? h("span", { class: "listed", title: "Zutaten sind auf den Einkaufslisten" }, " ✓ Zutaten geprüft") : null));
     var chips = h("div", { class: "mealchips" });
     if (out) {
       var note = st["note" + Cap];
@@ -1646,17 +1646,18 @@
     else if (pickDay !== key + "|dish" && !/\|out$/.test(String(pickDay))) box.append(h("p", { class: "noneyet" }, "Noch nichts geplant"));
 
     if (pickDay === key + "|dish") {
+      var sf = getSF(ds, slot);
       if (!(recipes || []).length) box.append(h("p", { class: "noneyet" }, "Lege zuerst im Kochbuch ein Gericht an."));
       else {
         var qIn = h("input", { type: "search", maxlength: "60", autocomplete: "off", placeholder: "Gericht suchen …", "aria-label": "Gericht suchen", value: pickF.q });
         var pk = h("div", { class: "picker" });
         var fill = function () {
           pk.replaceChildren();
-          var q = pickF.q.trim().toLowerCase(), ls = pickF.l.filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
+          var q = pickF.q.trim().toLowerCase(), ls = sf.l.filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
           var res = (recipes || []).filter(function (r) {
             var c = timeCat(r.minutes), e = Math.round(Number(r.effort)) || 0;
-            if (pickF.tm && !(c >= 1 && c <= pickF.tm)) return false;
-            if (pickF.em && !(e >= 1 && e <= pickF.em)) return false;
+            if (sf.tm && !(c >= 1 && c <= sf.tm)) return false;
+            if (sf.em && !(e >= 1 && e <= sf.em)) return false;
             if (ls.length && !(Array.isArray(r.labels) && ls.some(function (id) { return r.labels.indexOf(id) >= 0; }))) return false;
             if (!q) return true;
             var hay = [r.name].concat((r.ingredients || []).map(function (g) { return g.name; }), labelsOf(r).map(function (l) { return l.name; })).join(" ").toLowerCase();
@@ -1677,21 +1678,21 @@
           });
         };
         qIn.addEventListener("input", function (e) { pickF.q = e.target.value; fill(); });
-        var nAct = (pickF.tm ? 1 : 0) + (pickF.em ? 1 : 0) + pickF.l.length;
+        var nAct = (sf.tm ? 1 : 0) + (sf.em ? 1 : 0) + sf.l.length;
         box.append(h("div", { class: "searchrow" }, qIn,
           h("button", { class: "linkbtn fbtn" + (pickFOpen || nAct ? " on" : ""), type: "button", "aria-expanded": String(pickFOpen), "aria-label": "Filter für Zeit, Aufwand und Label", onclick: function () { pickFOpen = !pickFOpen; renderMeal(); } }, "⚙ Filter" + (nAct ? " · " + nAct : ""))));
         var fr = h("div", { class: "filters" });
-        fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Zeit"), scaleInput("🕐", pickF.tm, "Zeit höchstens", function (n) { pickF.tm = n; renderMeal(); }), h("span", { class: "hint" }, pickF.tm ? "bis " + TIME_CATS[pickF.tm - 1].short : "egal")));
-        fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"), scaleInput("⚡", pickF.em, "Aufwand höchstens", function (n) { pickF.em = n; renderMeal(); }), h("span", { class: "hint" }, pickF.em ? "höchstens " + EFFORT_NAMES[pickF.em] : "egal")));
+        fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Zeit"), scaleInput("🕐", sf.tm, "Zeit höchstens", function (n) { sf.tm = n; setSF(ds, slot, sf); renderMeal(); }), h("span", { class: "hint" }, sf.tm ? "bis " + TIME_CATS[sf.tm - 1].short : "egal")));
+        fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Aufwand"), scaleInput("⚡", sf.em, "Aufwand höchstens", function (n) { sf.em = n; setSF(ds, slot, sf); renderMeal(); }), h("span", { class: "hint" }, sf.em ? "höchstens " + EFFORT_NAMES[sf.em] : "egal")));
         if (labelDefs.length) {
           var lc = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
           labelDefs.forEach(function (l) {
-            var on = pickF.l.indexOf(l.id) >= 0;
+            var on = sf.l.indexOf(l.id) >= 0;
             lc.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () {
-              pickF.l = on ? pickF.l.filter(function (x) { return x !== l.id; }) : pickF.l.concat([l.id]); renderMeal();
+              sf.l = on ? sf.l.filter(function (x) { return x !== l.id; }) : sf.l.concat([l.id]); setSF(ds, slot, sf); renderMeal();
             } }, l.emoji));
           });
-          var actL = labelDefs.filter(function (l) { return pickF.l.indexOf(l.id) >= 0; });
+          var actL = labelDefs.filter(function (l) { return sf.l.indexOf(l.id) >= 0; });
           fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, actL.length ? actL.map(function (l) { return l.name; }).join(" oder ") : "egal")));
         }
         if (pickFOpen) box.append(fr);
@@ -1726,15 +1727,94 @@
   }
   /* Essensplan: Würfel */
   var diceState = {};
-  function diceInit(key, slot) {
-    if (!diceState[key]) {
-      var saved = {};
-      try { saved = JSON.parse(lsGet("pp-dice-" + slot) || "{}") || {}; } catch (e) {}
-      var tm = Number(saved.tm) || 0;
-      if (!tm && Array.isArray(saved.t) && saved.t.length) tm = Math.max.apply(null, saved.t.map(Number));
-      diceState[key] = { tm: tm >= 1 && tm <= TIME_CATS.length ? tm : 0, e: Math.min(5, Math.max(0, Number(saved.e) || 0)), l: Array.isArray(saved.l) ? saved.l.filter(function (x) { return typeof x === "string"; }) : [], cur: null, seen: [] };
+  /* Gemerkte Filter je Wochentag und Mahlzeit (gelten für alle kommenden Wochen) */
+  var slotFilters = {}, weekRoll = {}, weekRollFor = null;
+  function sfKey(ds, slot) { return ((dn(ds) + 3) % 7) + "|" + slot; }
+  function getSF(ds, slot) {
+    var f = slotFilters[sfKey(ds, slot)] || {};
+    return { tm: Number(f.tm) || 0, em: Number(f.em) || 0, l: Array.isArray(f.l) ? f.l.filter(function (x) { return labelDefs.some(function (l) { return l.id === x; }); }) : [] };
+  }
+  function sfActive(f) { return !!(f.tm || f.em || f.l.length); }
+  function setSF(ds, slot, f) {
+    var k = sfKey(ds, slot);
+    if (sfActive(f)) slotFilters[k] = { tm: f.tm, em: f.em, l: f.l.slice() }; else delete slotFilters[k];
+    if (!db) return;
+    db.doc("plan/_filters").set({ map: slotFilters, at: Date.now() }).catch(writeFail);
+  }
+  function commitDish(ds, slot, r) {
+    var Cap = capOf(slot), cur = slotsOf(plan[ds]);
+    if (cur[slot].some(function (x) { return x.id === r.id; })) return;
+    cur[slot] = cur[slot].concat([{ id: r.id, name: r.name }]); cur["out" + Cap] = false; cur["note" + Cap] = ""; cur["listed" + Cap] = false;
+    saveDay(ds, cur);
+    plan[ds] = Object.assign({}, plan[ds] || {}, { date: ds, lunch: cur.lunch, dinner: cur.dinner, outLunch: cur.outLunch, outDinner: cur.outDinner });
+  }
+  /* Ganze Woche würfeln: für alle freien Mahlzeiten mit gemerkten Filtern */
+  function rollTargets(mon, today) {
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var n = mon + i, ds = dnToStr(n);
+      if (n < today) continue;
+      var st = slotsOf(plan[ds]);
+      SLOTS.forEach(function (sl) {
+        if (st[sl].length || st["out" + capOf(sl)]) return;
+        if (sfActive(getSF(ds, sl))) out.push({ ds: ds, slot: sl, key: ds + "|" + sl });
+      });
     }
-    return diceState[key];
+    return out;
+  }
+  function rollWeek(targets, keep) {
+    var used = {};
+    var mon = weekStart(dn(targets[0] ? targets[0].ds : todayStr()));
+    for (var i = 0; i < 7; i++) allDishes(plan[dnToStr(mon + i)]).forEach(function (x) { used[x.id] = true; });
+    Object.keys(weekRoll).forEach(function (k) { if (weekRoll[k] && weekRoll[k].id && keep[k]) used[weekRoll[k].id] = true; });
+    targets.forEach(function (t) {
+      if (keep[t.key]) return;
+      var f = getSF(t.ds, t.slot), prev = weekRoll[t.key] && weekRoll[t.key].id;
+      var all = dicePool({ tm: f.tm, e: f.em, l: f.l }, {}).all;
+      var pool = all.filter(function (r) { return !used[r.id] && r.id !== prev; });
+      if (!pool.length) pool = all.filter(function (r) { return !used[r.id]; });
+      if (!pool.length) pool = all.filter(function (r) { return r.id !== prev; });
+      var pick = pool.length ? pool[Math.floor(Math.random() * pool.length)] : (all[0] || null);
+      weekRoll[t.key] = pick ? { id: pick.id } : { id: null };
+      if (pick) used[pick.id] = true;
+    });
+  }
+  function weekRollEl(mon, today) {
+    var targets = rollTargets(mon, today);
+    if (weekRollFor !== mon) { weekRoll = {}; weekRollFor = mon; }
+    Object.keys(weekRoll).forEach(function (k) { if (!targets.some(function (t) { return t.key === k; })) delete weekRoll[k]; });
+    var props = targets.filter(function (t) { return weekRoll[t.key]; });
+    if (!targets.length) return null;
+    var wrap = h("div", { class: "panel weekroll" });
+    if (!props.length) {
+      wrap.append(h("div", { class: "cookhead" },
+        h("span", { class: "hint" }, targets.length + (targets.length === 1 ? " Mahlzeit hat" : " Mahlzeiten haben") + " gemerkte Filter"),
+        h("button", { class: "primary", type: "button", "aria-label": "Woche auswürfeln", onclick: function () { rollWeek(targets, {}); renderMeal(); } }, "🎲 Woche")));
+      return wrap;
+    }
+    var rows = h("div", { class: "wrrows" });
+    props.forEach(function (t) {
+      var r = (recipes || []).filter(function (x) { return x.id === weekRoll[t.key].id; })[0];
+      rows.append(h("div", { class: "wrrow" },
+        h("span", { class: "wrwhen" }, WD[(dn(t.ds) + 3) % 7] + " " + (t.slot === "lunch" ? "Mittag" : "Abend")),
+        h("span", { class: "wrname" }, r ? r.name : "Nichts passt", r ? labelsEl(r) : null),
+        r ? h("button", { class: "linkbtn wrok", type: "button", "aria-label": "Übernehmen: " + r.name, onclick: function () { commitDish(t.ds, t.slot, r); delete weekRoll[t.key]; renderMeal(); } }, "✓") : null,
+        h("button", { class: "linkbtn", type: "button", "aria-label": "Neu würfeln", onclick: function () { var keep = {}; targets.forEach(function (x) { if (x.key !== t.key) keep[x.key] = true; }); rollWeek(targets, keep); renderMeal(); } }, "🎲")));
+    });
+    wrap.append(rows, h("div", { class: "row" },
+      h("button", { class: "primary", type: "button", onclick: function () {
+        props.forEach(function (t) { var r = (recipes || []).filter(function (x) { return x.id === weekRoll[t.key].id; })[0]; if (r) commitDish(t.ds, t.slot, r); });
+        weekRoll = {}; renderMeal();
+      } }, "Alle übernehmen"),
+      h("button", { class: "linkbtn", type: "button", onclick: function () { rollWeek(targets, {}); renderMeal(); } }, "🎲 Alle neu"),
+      h("button", { class: "linkbtn", type: "button", onclick: function () { weekRoll = {}; renderMeal(); } }, "Verwerfen")));
+    return wrap;
+  }
+  function diceInit(key, slot, ds) {
+    var d = diceState[key] = diceState[key] || { cur: null, seen: [] };
+    var f = getSF(ds, slot);
+    d.tm = f.tm; d.e = f.em; d.l = f.l;
+    return d;
   }
   function dicePool(d, plannedWeek) {
     var all = (recipes || []).filter(function (r) {
@@ -1748,7 +1828,7 @@
     return { all: all, fresh: fresh.length ? fresh : all };
   }
   function diceRoll(ds, slot, key) {
-    var d = diceInit(key, slot);
+    var d = diceInit(key, slot, ds);
     var week = {};
     var mon = weekStart(dn(ds));
     for (var i = 0; i < 7; i++) allDishes(plan[dnToStr(mon + i)]).forEach(function (x) { week[x.id] = true; });
@@ -1761,8 +1841,8 @@
   }
   function diceEl(ds, slot, key) {
     var Cap = capOf(slot);
-    var d = diceInit(key, slot);
-    var save = function () { lsSet("pp-dice-" + slot, JSON.stringify({ tm: d.tm, e: d.e, l: d.l })); d.cur = null; d.seen = []; renderMeal(); };
+    var d = diceInit(key, slot, ds);
+    var save = function () { setSF(ds, slot, { tm: d.tm, em: d.e, l: d.l }); d.cur = null; d.seen = []; renderMeal(); };
     var tSel = h("div", { class: "scrow" }, h("span", { class: "zl" }, "Schnell"),
       scaleInput("🕐", d.tm, "Zeit höchstens", function (n) { d.tm = n; save(); }),
       h("span", { class: "hint" }, d.tm ? "bis " + TIME_CATS[d.tm - 1].short : "egal"));
@@ -1823,6 +1903,7 @@
     $("weeklabel").textContent = (weekOffset === 0 ? "Diese Woche · " : "") + dayLabel(mon) + " – " + dayLabel(mon + 6);
     $("weektoday").hidden = weekOffset === 0;
     if (!planLoaded || recipes === null) { $("mealhead").textContent = "Essensplan wird geladen …"; $("mealshop").hidden = true; return; }
+    var wr = weekRollEl(mon, today); if (wr) box.append(wr);
     var total = 0, outN = 0, ids = {}, pendSlots = [], allSlots = [], pendIds = {};
     for (var i = 0; i < 7; i++) {
       var n = mon + i, ds = dnToStr(n);
@@ -3284,6 +3365,8 @@
       a.forEach(function (d) { m[d.id] = d; });
       var cd = m._catalog; delete m._catalog;
       catalogSaved = cd && Array.isArray(cd.list) ? cd.list.filter(function (c) { return c && typeof c.n === "string"; }) : [];
+      var fd = m._filters; delete m._filters;
+      slotFilters = fd && fd.map && typeof fd.map === "object" ? fd.map : {};
       var ld = m._labels; delete m._labels;
       labelDefs = ld && Array.isArray(ld.list) ? ld.list.filter(function (l) { return l && typeof l.id === "string" && typeof l.emoji === "string" && typeof l.name === "string"; }) : [];
       plan = m; planLoaded = true;
