@@ -1648,7 +1648,7 @@
     if (pickDay === key + "|dish") {
       if (!(recipes || []).length) box.append(h("p", { class: "noneyet" }, "Lege zuerst im Kochbuch ein Gericht an."));
       else {
-        var qIn = h("input", { type: "search", maxlength: "60", autocomplete: "off", placeholder: "Gericht, Zutat oder Label suchen …", "aria-label": "Gericht suchen", value: pickF.q });
+        var qIn = h("input", { type: "search", maxlength: "60", autocomplete: "off", placeholder: "Gericht suchen …", "aria-label": "Gericht suchen", value: pickF.q });
         var pk = h("div", { class: "picker" });
         var fill = function () {
           pk.replaceChildren();

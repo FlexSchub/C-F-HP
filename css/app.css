@@ -666,3 +666,9 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .editchip .x { background: none; border: 0; padding: 6px 8px; color: var(--muted); font-size: 1.1rem; }
 .chipform { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; width: 100%; padding: 6px 0; }
 .chipform input { flex: 1 1 140px; }
+.slot { min-width: 0; }
+.slot > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.slot .searchrow input { width: 100%; }
+.slot .fbtn { flex: 0 0 auto; white-space: nowrap; padding: 6px 10px; min-height: 48px; }
+.slot .fbtn.on { border-color: var(--accent); }
+.picker .bchip { max-width: 100%; }
