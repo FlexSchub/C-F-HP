@@ -777,3 +777,5 @@ h1 { font-size: 2.1rem; letter-spacing: -0.02em; }
 .day.nd .dtitle b, .day.nd .dtitle span { color: #fff; }
 .day.nd.past .dayhead { opacity: 1; background: color-mix(in srgb, var(--accent) 82%, var(--surface)); }
 .weekroll .cookhead { min-height: 40px; }
+.mini { font-size: .62rem; letter-spacing: -1px; opacity: .85; white-space: nowrap; display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle; }
+.dsum .mini { margin-left: 2px; }

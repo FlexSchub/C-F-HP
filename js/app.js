@@ -1155,6 +1155,15 @@
     for (var i = 1; i <= 5; i++) scale.append(h("span", { class: i <= n ? "on" : "off" }, "⚡"));
     return h("div", { class: "dclock", role: "img", "aria-label": "Aufwand " + n + " von 5, " + EFFORT_NAMES[n], title: EFFORT_NAMES[n] }, h("span", { class: "zl" }, "Aufwand"), scale);
   }
+  function miniScales(r) {
+    if (!r) return null;
+    var e = Math.round(Number(r.effort)), c = timeCat(r.minutes);
+    if (!(e >= 1 && e <= 5) && !c) return null;
+    var w = h("span", { class: "mini", role: "img", "aria-label": (e >= 1 ? "Aufwand " + e + " von 5" : "") + (e >= 1 && c ? ", " : "") + (c ? "Zeit " + c + " von 5" : "") });
+    if (e >= 1 && e <= 5) w.append(h("span", { "aria-hidden": "true" }, new Array(e + 1).join("⚡")));
+    if (c) w.append(h("span", { "aria-hidden": "true" }, new Array(c + 1).join("🕐")));
+    return w;
+  }
   function labelsOf(r) { return (Array.isArray(r.labels) ? r.labels : []).map(function (id) { return labelDefs.filter(function (l) { return l.id === id; })[0]; }).filter(Boolean); }
   function labelsEl(r) {
     var ls = labelsOf(r);
@@ -1638,7 +1647,7 @@
     dishes.forEach(function (d, idx) {
       var rec = (recipes || []).filter(function (r) { return r.id === d.id; })[0];
       var nm = rec ? rec.name : d.name;
-      chips.append(h("span", { class: "meal" }, nm,
+      chips.append(h("span", { class: "meal" }, nm, miniScales(rec),
         h("button", { class: "x", type: "button", "aria-label": nm + " aus dem Plan nehmen", onclick: function () {
           var cur = slotsOf(plan[ds]); cur[slot] = cur[slot].filter(function (_, j) { return j !== idx; }); saveDay(ds, cur);
         } }, "×")));
@@ -1856,8 +1865,7 @@
         h("button", { class: "plantitle", type: "button", "aria-expanded": String(planOpen), onclick: function () { planOpen = !planOpen; renderMeal(); } }, "Woche planen ", h("span", { class: "chev", "aria-hidden": "true" }, planOpen ? "▾" : "▸")),
         h("span", { class: "planbtns" },
           targets.length ? h("button", { class: "primary", type: "button", "aria-label": "Woche auswürfeln", onclick: function () { rollWeek(targets, {}); renderMeal(); } }, "🎲 Woche") : null)));
-      if (!planOpen) wrap.append(h("p", { class: "hint" }, targets.length ? targets.length + (targets.length === 1 ? " Mahlzeit ist" : " Mahlzeiten sind") + " zum Auswürfeln eingeplant." : "Tippe auf „Woche planen“, um festzulegen, für welche Tage und Mahlzeiten Vorschläge kommen sollen."));
-      else wrap.append(planConfigEl(mon, today));
+      if (planOpen) wrap.append(planConfigEl(mon, today));
       return wrap;
     }
     var rows = h("div", { class: "wrrows" });
@@ -1960,7 +1968,7 @@
   }
   var mealOpen = {};
   function dayEl(n, ds, today) {
-    var open = mealOpen[ds] === undefined ? n >= today : mealOpen[ds];
+    var open = !!mealOpen[ds];
     var cls = "day nd" + (n === today ? " today" : "") + (n < today ? " past" : "") + (open ? "" : " folded");
     var head = h("div", { class: "dayhead" },
       h("span", { class: "dtitle" }, h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n))),
@@ -1968,10 +1976,16 @@
     if (!open) {
       var st = slotsOf(plan[ds]);
       var part = function (sl, tag) {
-        var c = capOf(sl), names = st[sl].map(function (d) { return d.name; });
-        return tag + " " + (names.length ? names.join(", ") : st["out" + c] ? "Auswärts" : "–");
+        var c = capOf(sl), row = h("span", null, tag + " ");
+        if (!st[sl].length) { row.append(st["out" + c] ? "Auswärts" : "–"); return row; }
+        st[sl].forEach(function (d, i) {
+          var rec = (recipes || []).filter(function (r) { return r.id === d.id; })[0];
+          row.append((i ? ", " : "") + (rec ? rec.name : d.name));
+          var m = miniScales(rec); if (m) row.append(" ", m);
+        });
+        return row;
       };
-      return h("div", { class: cls }, head, h("div", { class: "dmeals dsum" }, h("span", null, part("lunch", "M:")), h("span", null, part("dinner", "A:"))));
+      return h("div", { class: cls }, head, h("div", { class: "dmeals dsum" }, part("lunch", "M:"), part("dinner", "A:")));
     }
     return h("div", { class: cls }, head, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
   }
