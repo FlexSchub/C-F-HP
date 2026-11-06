@@ -712,3 +712,68 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .dtog .chev { color: var(--accent); font-size: .8rem; }
 .day.folded { padding-top: 8px; padding-bottom: 8px; align-items: center; }
 .dsum { font-size: .9rem; color: var(--muted); overflow-wrap: anywhere; }
+
+/* Tage neu: grüner Kopf, Toggle rechts oben */
+.day.nd { display: block; padding: 0; overflow: hidden; }
+.day.nd .dayhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--accent); color: #fff; padding: 6px 8px 6px 14px; min-height: 44px; }
+.day.nd.past .dayhead { opacity: .85; }
+.day.nd .dtitle { display: flex; align-items: baseline; gap: 8px; }
+.day.nd .dtitle b { font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; }
+.day.nd .dtitle span { font-size: .85rem; opacity: .9; font-variant-numeric: tabular-nums; }
+.day.nd .dtog { background: transparent; border: 0; color: #fff; width: 44px; height: 44px; margin: -6px 0; font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.day.nd .dmeals { padding: 10px 14px; }
+.day.nd.folded .dmeals { padding: 8px 14px; }
+.dsum { display: flex; flex-direction: column; gap: 2px; font-size: .9rem; color: var(--muted); }
+.slotbtn { font-weight: 700; }
+.plantitle { background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 700; color: inherit; display: inline-flex; gap: 6px; align-items: center; min-height: 36px; }
+.plantitle .chev { color: var(--accent); font-size: .85rem; }
+
+/* ===== Facelift (Update 50): ruhiger, wärmer, runder ===== */
+:root {
+  --bg: #f5f2ec;
+  --surface: #ffffff;
+  --ink: #1b2b28;
+  --muted: #5a6a66;
+  --line: #ebe6dc;
+  --line-strong: #cdc6b8;
+  --accent: #14614f;
+  --accent-ink: #ffffff;
+  --apricot: #f2b879;
+  --apricot-soft: #fcebd4;
+  --shadow: 0 1px 2px rgba(27, 43, 40, .06), 0 8px 24px rgba(27, 43, 40, .06);
+  --font-display: ui-rounded, "SF Pro Rounded", "Avenir Next Rounded", "Avenir Next", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #101a19; --surface: #18262a; --line: #263a3b; --line-strong: #3b5456; --apricot: #f0b35a; --apricot-soft: #3a2c14; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.25); }
+}
+:root[data-theme="dark"] { --bg: #101a19; --surface: #18262a; --line: #263a3b; --line-strong: #3b5456; --apricot: #f0b35a; --apricot-soft: #3a2c14; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.25); }
+
+h1 { font-size: 2.1rem; letter-spacing: -0.02em; }
+.panel, .items, .day, .stockbox, details.add { border: 0; border-radius: 22px; box-shadow: var(--shadow); }
+.panel { padding: 18px; }
+.items li { border-top-color: var(--line); }
+.items li { min-height: 60px; }
+.primary { border-radius: 16px; min-height: 48px; font-weight: 700; }
+.linkbtn { border-radius: 12px; border-color: var(--line-strong); }
+.bchip { border: 1px solid var(--line); background: var(--surface); }
+.bchip::before { color: var(--accent); }
+.bchip.sel { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: var(--accent); }
+.store { border-color: var(--line); }
+.store[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.store[aria-pressed="true"] .cnt { background: var(--apricot); color: #3a2406; }
+.seg { border-color: var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.check { border-color: var(--line-strong); }
+.group h2 { color: var(--muted); }
+.panel input[type="text"], .panel select, .panel input[type="search"] { border-radius: 14px; border-color: var(--line); }
+.day.nd.today .dayhead { background: color-mix(in srgb, var(--accent) 78%, #000); }
+.day.nd.today .dtitle b::after { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--apricot); margin-left: 8px; vertical-align: middle; }
+.day.nd .dmeals { padding: 12px 16px; }
+.weekroll { background: var(--apricot-soft); }
+.weekroll .hint, .weekroll b { color: var(--ink); }
+.plancard { border-radius: 16px; }
+.day.nd .dtitle { color: #fff; cursor: default; }
+.day.nd .dtitle b, .day.nd .dtitle span { color: #fff; }
+.day.nd.past .dayhead { opacity: 1; background: color-mix(in srgb, var(--accent) 82%, var(--surface)); }
+.weekroll .cookhead { min-height: 40px; }

@@ -1625,7 +1625,7 @@
     var key = ds + "|" + slot;
     var menuOpen = !!pickDay && String(pickDay).indexOf(key + "|") === 0;
     var box = h("div", { class: "slot" }, h("div", { class: "slabel" },
-      h("button", { class: "slotbtn", type: "button", "aria-expanded": String(menuOpen), onclick: function () { pickDay = menuOpen ? null : key + "|menu"; renderMeal(); } }, SLOT_NAMES[slot], h("span", { class: "chev", "aria-hidden": "true" }, menuOpen ? "▾" : "▸")), sfActive(getSF(ds, slot)) ? h("span", { class: "fset", title: "Gemerkte Filter für diesen Wochentag" }, "⚙") : null, dishes.length && st["listed" + Cap] ? h("span", { class: "listed", title: "Zutaten sind auf den Einkaufslisten" }, " ✓ Zutaten geprüft") : null));
+      h("button", { class: "slotbtn", type: "button", "aria-expanded": String(menuOpen), "aria-label": SLOT_NAMES[slot], onclick: function () { pickDay = menuOpen ? null : key + "|menu"; renderMeal(); } }, slot === "lunch" ? "M:" : "A:", h("span", { class: "chev", "aria-hidden": "true" }, menuOpen ? "▾" : "▸")), sfActive(getSF(ds, slot)) ? h("span", { class: "fset", title: "Gemerkte Filter für diesen Wochentag" }, "⚙") : null, dishes.length && st["listed" + Cap] ? h("span", { class: "listed", title: "Zutaten sind auf den Einkaufslisten" }, " ✓ Zutaten geprüft") : null));
     var chips = h("div", { class: "mealchips" });
     if (out) {
       var note = st["note" + Cap];
@@ -1853,11 +1853,10 @@
     var wrap = h("div", { class: "panel weekroll" });
     if (!props.length) {
       wrap.append(h("div", { class: "cookhead" },
-        h("b", null, "Woche planen"),
+        h("button", { class: "plantitle", type: "button", "aria-expanded": String(planOpen), onclick: function () { planOpen = !planOpen; renderMeal(); } }, "Woche planen ", h("span", { class: "chev", "aria-hidden": "true" }, planOpen ? "▾" : "▸")),
         h("span", { class: "planbtns" },
-          h("button", { class: "linkbtn", type: "button", "aria-expanded": String(planOpen), onclick: function () { planOpen = !planOpen; renderMeal(); } }, planOpen ? "Zuklappen" : "Tage & Filter"),
           targets.length ? h("button", { class: "primary", type: "button", "aria-label": "Woche auswürfeln", onclick: function () { rollWeek(targets, {}); renderMeal(); } }, "🎲 Woche") : null)));
-      if (!planOpen) wrap.append(h("p", { class: "hint" }, targets.length ? targets.length + (targets.length === 1 ? " Mahlzeit ist" : " Mahlzeiten sind") + " zum Auswürfeln eingeplant." : "Wähle unter „Tage & Filter“, für welche Tage und Mahlzeiten Vorschläge kommen sollen."));
+      if (!planOpen) wrap.append(h("p", { class: "hint" }, targets.length ? targets.length + (targets.length === 1 ? " Mahlzeit ist" : " Mahlzeiten sind") + " zum Auswürfeln eingeplant." : "Tippe auf „Woche planen“, um festzulegen, für welche Tage und Mahlzeiten Vorschläge kommen sollen."));
       else wrap.append(planConfigEl(mon, today));
       return wrap;
     }
@@ -1962,16 +1961,19 @@
   var mealOpen = {};
   function dayEl(n, ds, today) {
     var open = mealOpen[ds] === undefined ? n >= today : mealOpen[ds];
-    var cls = "day" + (n === today ? " today" : "") + (n < today ? " past" : "") + (open ? "" : " folded");
-    var lab = h("button", { class: "dlab dtog", type: "button", "aria-expanded": String(open), "aria-label": WD[(n + 3) % 7] + " " + dayLabel(n) + (open ? " zuklappen" : " aufklappen"), onclick: function () { mealOpen[ds] = !open; renderMeal(); } },
-      h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n)), h("span", { class: "chev", "aria-hidden": "true" }, open ? "▾" : "▸"));
+    var cls = "day nd" + (n === today ? " today" : "") + (n < today ? " past" : "") + (open ? "" : " folded");
+    var head = h("div", { class: "dayhead" },
+      h("span", { class: "dtitle" }, h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n))),
+      h("button", { class: "dtog", type: "button", "aria-expanded": String(open), "aria-label": WD[(n + 3) % 7] + " " + dayLabel(n) + (open ? " zuklappen" : " aufklappen"), onclick: function () { mealOpen[ds] = !open; renderMeal(); } }, open ? "▾" : "▸"));
     if (!open) {
-      var st = slotsOf(plan[ds]), names = st.lunch.concat(st.dinner).map(function (d) { return d.name; });
-      var out = (st.outLunch ? 1 : 0) + (st.outDinner ? 1 : 0);
-      var txt = names.length ? names.join(" · ") : out ? "Auswärts" : "nichts geplant";
-      return h("div", { class: cls }, lab, h("div", { class: "dmeals dsum" }, txt));
+      var st = slotsOf(plan[ds]);
+      var part = function (sl, tag) {
+        var c = capOf(sl), names = st[sl].map(function (d) { return d.name; });
+        return tag + " " + (names.length ? names.join(", ") : st["out" + c] ? "Auswärts" : "–");
+      };
+      return h("div", { class: cls }, head, h("div", { class: "dmeals dsum" }, h("span", null, part("lunch", "M:")), h("span", null, part("dinner", "A:"))));
     }
-    return h("div", { class: cls }, lab, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
+    return h("div", { class: cls }, head, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
   }
   function renderMeal() {
     var box = $("mealdays");
