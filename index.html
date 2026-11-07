@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
-<link rel="stylesheet" href="css/app.css?v=51">
+<link rel="stylesheet" href="css/app.css?v=53">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -290,9 +290,12 @@
   </section>
 
   <section class="col" id="mealview" hidden>
-    <div class="seg viewseg" id="mealseg" role="group" aria-label="Bereich Essen">
-      <button type="button" data-go="meal" aria-pressed="true">Essensplan</button>
-      <button type="button" data-go="cook" aria-pressed="false">Kochbuch</button>
+    <div class="mealtop">
+      <div class="seg viewseg" id="mealseg" role="group" aria-label="Bereich Essen">
+        <button type="button" data-go="meal" aria-pressed="true">Essensplan</button>
+        <button type="button" data-go="cook" aria-pressed="false">Kochbuch</button>
+      </div>
+      <div class="mealtools" id="mealtools"></div>
     </div>
     <p class="headline" id="mealhead" aria-live="polite">Essensplan wird geladen …</p>
     <div class="weeknav">
@@ -537,7 +540,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=51"></script>
-<script src="js/app.js?v=51"></script>
+<script src="js/store-supabase.js?v=53"></script>
+<script src="js/app.js?v=53"></script>
 </body>
 </html>

@@ -1854,18 +1854,18 @@
     return wrap;
   }
   function weekRollEl(mon, today) {
-    if (mon + 6 < today) return null;
+    if (mon + 6 < today) { $("mealtools").replaceChildren(); return null; }
     var targets = rollTargets(mon, today);
     if (weekRollFor !== mon) { weekRoll = {}; weekRollFor = mon; }
     Object.keys(weekRoll).forEach(function (k) { if (!targets.some(function (t) { return t.key === k; })) delete weekRoll[k]; });
     var props = targets.filter(function (t) { return weekRoll[t.key]; });
+    var tools = $("mealtools"); tools.replaceChildren();
+    tools.append(h("button", { class: "plantitle", type: "button", "aria-expanded": String(planOpen), onclick: function () { planOpen = !planOpen; renderMeal(); } }, "Woche planen", h("span", { class: "chev", "aria-hidden": "true" }, planOpen ? "▾" : "▸")));
+    if (!props.length && targets.length) tools.append(h("button", { class: "dicebtn", type: "button", "aria-label": "Woche auswürfeln", title: "Woche auswürfeln", onclick: function () { rollWeek(targets, {}); renderMeal(); } }, "🎲"));
     var wrap = h("div", { class: "panel weekroll" });
     if (!props.length) {
-      wrap.append(h("div", { class: "cookhead" },
-        h("button", { class: "plantitle", type: "button", "aria-expanded": String(planOpen), onclick: function () { planOpen = !planOpen; renderMeal(); } }, "Woche planen ", h("span", { class: "chev", "aria-hidden": "true" }, planOpen ? "▾" : "▸")),
-        h("span", { class: "planbtns" },
-          targets.length ? h("button", { class: "primary", type: "button", "aria-label": "Woche auswürfeln", onclick: function () { rollWeek(targets, {}); renderMeal(); } }, "🎲 Woche") : null)));
-      if (planOpen) wrap.append(planConfigEl(mon, today));
+      if (!planOpen) return null;
+      wrap.append(planConfigEl(mon, today));
       return wrap;
     }
     var rows = h("div", { class: "wrrows" });
@@ -1991,7 +1991,7 @@
   }
   function renderMeal() {
     var box = $("mealdays");
-    box.replaceChildren();
+    box.replaceChildren(); $("mealtools").replaceChildren();
     var mon = weekStart(dn(todayStr())) + weekOffset * 7;
     var today = dn(todayStr());
     $("weeklabel").textContent = (weekOffset === 0 ? "Diese Woche · " : "") + dayLabel(mon) + " – " + dayLabel(mon + 6);
@@ -3303,12 +3303,30 @@
     busShown[id] = 0;
     return box;
   }
+  /* kleine Auspuff-Wölkchen hinter dem Bus, solange er ein Feld nach vorn fährt */
+  function busPuff(l) {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (var i = 0; i < 6; i++) (function (k) {
+      setTimeout(function () {
+        if (!l.road.isConnected) return;
+        var rb = l.road.getBoundingClientRect(), bb = l.bus.getBoundingClientRect();
+        var p = h("span", { class: "bzpuff", "aria-hidden": "true" });
+        p.style.left = (bb.left - rb.left + 4) + "px";
+        p.style.setProperty("--d", (8 + Math.random() * 10).toFixed(0) + "px");
+        p.style.setProperty("--s", (0.8 + Math.random() * 0.7).toFixed(2));
+        l.road.append(p);
+        setTimeout(function () { p.remove(); }, 800);
+      }, k * 100);
+    })(i);
+  }
   function busPlace(id, pos, back) {
     var l = busLanes[id], w = l.road.clientWidth, trackW = w - 44, busW = 46;
     var left = pos / BZ_GOAL * (trackW - busW) + 2;
     if (pos >= BZ_GOAL) left = w - busW - 4;
+    var prev = l.bus.style.left === "" ? null : parseFloat(l.bus.style.left), nl = Math.max(2, left);
     l.bus.classList.toggle("back", !!back);
-    l.bus.style.left = Math.max(2, left) + "px";
+    l.bus.style.left = nl + "px";
+    if (prev !== null && !back && nl > prev + 1) busPuff(l);
     l.tag.style.left = Math.max(2, left + 12) + "px";
   }
   function busRenderRace() {
