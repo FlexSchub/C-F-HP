@@ -1668,7 +1668,7 @@
             var c = timeCat(r.minutes), e = Math.round(Number(r.effort)) || 0;
             if (sf.tm && !(c >= 1 && c <= sf.tm)) return false;
             if (sf.em && !(e >= 1 && e <= sf.em)) return false;
-            if (ls.length && !(Array.isArray(r.labels) && ls.some(function (id) { return r.labels.indexOf(id) >= 0; }))) return false;
+            if (!lblOk(r, ls, sf.x)) return false;
             if (!q) return true;
             var hay = [r.name].concat((r.ingredients || []).map(function (g) { return g.name; }), labelsOf(r).map(function (l) { return l.name; })).join(" ").toLowerCase();
             return q.split(/\s+/).every(function (w) { return hay.indexOf(w) >= 0; });
@@ -1688,7 +1688,7 @@
           });
         };
         qIn.addEventListener("input", function (e) { pickF.q = e.target.value; fill(); });
-        var nAct = (sf.tm ? 1 : 0) + (sf.em ? 1 : 0) + sf.l.length;
+        var nAct = (sf.tm ? 1 : 0) + (sf.em ? 1 : 0) + sf.l.length + sf.x.length;
         box.append(h("div", { class: "searchrow" }, qIn,
           h("button", { class: "linkbtn fbtn" + (pickFOpen || nAct ? " on" : ""), type: "button", "aria-expanded": String(pickFOpen), "aria-label": "Filter für Zeit, Aufwand und Label", onclick: function () { pickFOpen = !pickFOpen; renderMeal(); } }, "⚙ Filter" + (nAct ? " · " + nAct : ""))));
         var fr = h("div", { class: "filters" });
@@ -1697,13 +1697,9 @@
         if (labelDefs.length) {
           var lc = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
           labelDefs.forEach(function (l) {
-            var on = sf.l.indexOf(l.id) >= 0;
-            lc.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () {
-              sf.l = on ? sf.l.filter(function (x) { return x !== l.id; }) : sf.l.concat([l.id]); setSF(ds, slot, sf); renderMeal();
-            } }, l.emoji));
+            lc.append(lblChip(l, lblState(sf, l.id), function () { lblStep(sf, l.id); setSF(ds, slot, sf); renderMeal(); }));
           });
-          var actL = labelDefs.filter(function (l) { return sf.l.indexOf(l.id) >= 0; });
-          fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, actL.length ? actL.map(function (l) { return l.name; }).join(" oder ") : "egal")));
+          fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, lblHint(sf))));
         }
         if (pickFOpen) box.append(fr);
         box.append(pk);
@@ -1742,14 +1738,14 @@
   function sfKey(ds, slot) { return ((dn(ds) + 3) % 7) + "|" + slot; }
   function getSF(ds, slot) {
     var f0 = slotFilters[sfKey(ds, slot)], f = f0 || {};
-    return { on: !!f0 && f0.on !== false, tm: Number(f.tm) || 0, em: Number(f.em) || 0, l: Array.isArray(f.l) ? f.l.filter(function (x) { return labelDefs.some(function (l) { return l.id === x; }); }) : [] };
+    return { on: !!f0 && f0.on !== false, tm: Number(f.tm) || 0, em: Number(f.em) || 0, l: Array.isArray(f.l) ? f.l.filter(function (x) { return labelDefs.some(function (l) { return l.id === x; }); }) : [], x: Array.isArray(f.x) ? f.x.filter(function (x) { return labelDefs.some(function (l) { return l.id === x; }); }) : [] };
   }
-  function sfActive(f) { return !!(f.tm || f.em || f.l.length); }
+  function sfActive(f) { return !!(f.tm || f.em || f.l.length || (f.x && f.x.length)); }
   function setSF(ds, slot, f) {
     var k = sfKey(ds, slot);
     var prev = slotFilters[k], on = f.on === undefined ? (!!prev && prev.on !== false) : !!f.on;
     if (!prev && sfActive(f)) on = true;
-    if (on || sfActive(f)) slotFilters[k] = { on: on, tm: f.tm, em: f.em, l: f.l.slice() }; else delete slotFilters[k];
+    if (on || sfActive(f)) slotFilters[k] = { on: on, tm: f.tm, em: f.em, l: f.l.slice(), x: (f.x || []).slice() }; else delete slotFilters[k];
     if (!db) return;
     db.doc("plan/_filters").set({ map: slotFilters, at: Date.now() }).catch(writeFail);
   }
@@ -1782,7 +1778,7 @@
     targets.forEach(function (t) {
       if (keep[t.key]) return;
       var f = getSF(t.ds, t.slot), prev = weekRoll[t.key] && weekRoll[t.key].id;
-      var all = dicePool({ tm: f.tm, e: f.em, l: f.l }, {}).all;
+      var all = dicePool({ tm: f.tm, e: f.em, l: f.l, x: f.x }, {}).all;
       var pool = all.filter(function (r) { return !used[r.id] && r.id !== prev; });
       if (!pool.length) pool = all.filter(function (r) { return !used[r.id]; });
       if (!pool.length) pool = all.filter(function (r) { return r.id !== prev; });
@@ -1794,7 +1790,8 @@
   var planOpen = false, planEdit = null;
   function sfSummary(f) {
     var ls = labelDefs.filter(function (l) { return f.l.indexOf(l.id) >= 0; }).map(function (l) { return l.emoji; }).join("");
-    var t = (f.em ? "⚡" + f.em + " " : "") + (f.tm ? "🕐" + f.tm + " " : "") + ls;
+    var xs = labelDefs.filter(function (l) { return (f.x || []).indexOf(l.id) >= 0; }).map(function (l) { return l.emoji; }).join("");
+    var t = (f.em ? "⚡" + f.em + " " : "") + (f.tm ? "🕐" + f.tm + " " : "") + ls + (xs ? " 🚫" + xs : "");
     return t.trim() || "beliebig";
   }
   function planEditor(ds, slot) {
@@ -1805,10 +1802,9 @@
     if (labelDefs.length) {
       var lc = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
       labelDefs.forEach(function (l) {
-        var on = f.l.indexOf(l.id) >= 0;
-        lc.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () { f.l = on ? f.l.filter(function (x) { return x !== l.id; }) : f.l.concat([l.id]); put(); } }, l.emoji));
+        lc.append(lblChip(l, lblState(f, l.id), function () { lblStep(f, l.id); put(); }));
       });
-      box.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc));
+      box.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, lblHint(f))));
     }
     return box;
   }
@@ -1889,16 +1885,37 @@
   function diceInit(key, slot, ds) {
     var d = diceState[key] = diceState[key] || { cur: null, seen: [] };
     var f = getSF(ds, slot);
-    d.tm = f.tm; d.e = f.em; d.l = f.l;
+    d.tm = f.tm; d.e = f.em; d.l = f.l; d.x = f.x;
     return d;
+  }
+  /* Label-Filter mit drei Zuständen: aus -> muss (grün) -> ausgeschlossen (rot) */
+  function lblState(f, id) { return f.l.indexOf(id) >= 0 ? 1 : (f.x || []).indexOf(id) >= 0 ? 2 : 0; }
+  function lblStep(f, id) {
+    var st = lblState(f, id);
+    f.l = f.l.filter(function (v) { return v !== id; }); f.x = (f.x || []).filter(function (v) { return v !== id; });
+    if (st === 0) f.l.push(id); else if (st === 1) f.x.push(id);
+  }
+  function lblOk(r, l, x) {
+    var rl = Array.isArray(r.labels) ? r.labels : [];
+    if (x && x.length && x.some(function (id) { return rl.indexOf(id) >= 0; })) return false;
+    if (l.length && !l.some(function (id) { return rl.indexOf(id) >= 0; })) return false;
+    return true;
+  }
+  function lblChip(l, st, onclick) {
+    return h("button", { class: "lchip" + (st === 1 ? " on" : st === 2 ? " ex" : ""), type: "button", "aria-pressed": st ? "true" : "false",
+      "aria-label": l.name + (st === 1 ? " (muss dabei sein)" : st === 2 ? " (ausgeschlossen)" : ""), title: l.name + (st === 2 ? " – ausgeschlossen" : ""), onclick: onclick }, l.emoji);
+  }
+  function lblHint(f) {
+    var inc = labelDefs.filter(function (l) { return f.l.indexOf(l.id) >= 0; }).map(function (l) { return l.name; }).join(" oder ");
+    var exc = labelDefs.filter(function (l) { return (f.x || []).indexOf(l.id) >= 0; }).map(function (l) { return l.name; }).join(", ");
+    return (inc || exc) ? (inc + (inc && exc ? " · " : "") + (exc ? "ohne " + exc : "")) : "egal (2× tippen = ausschließen)";
   }
   function dicePool(d, plannedWeek) {
     var all = (recipes || []).filter(function (r) {
       if (d.tm && !(timeCat(r.minutes) >= 1 && timeCat(r.minutes) <= d.tm)) return false;
       if (d.e && !(Number(r.effort) >= 1 && Number(r.effort) <= d.e)) return false;
       var dl = d.l.filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
-      if (dl.length && !(Array.isArray(r.labels) && dl.some(function (id) { return r.labels.indexOf(id) >= 0; }))) return false;
-      return true;
+      return lblOk(r, dl, d.x || []);
     });
     var fresh = all.filter(function (r) { return !plannedWeek[r.id]; });
     return { all: all, fresh: fresh.length ? fresh : all };
@@ -1918,7 +1935,7 @@
   function diceEl(ds, slot, key) {
     var Cap = capOf(slot);
     var d = diceInit(key, slot, ds);
-    var save = function () { setSF(ds, slot, { tm: d.tm, em: d.e, l: d.l }); d.cur = null; d.seen = []; renderMeal(); };
+    var save = function () { setSF(ds, slot, { tm: d.tm, em: d.e, l: d.l, x: d.x }); d.cur = null; d.seen = []; renderMeal(); };
     var tSel = h("div", { class: "scrow" }, h("span", { class: "zl" }, "Schnell"),
       scaleInput("🕐", d.tm, "Zeit höchstens", function (n) { d.tm = n; save(); }),
       h("span", { class: "hint" }, d.tm ? "bis " + TIME_CATS[d.tm - 1].short : "egal"));
@@ -1930,23 +1947,19 @@
       lSel = h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"));
       var lchips = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
       labelDefs.forEach(function (l) {
-        var on = d.l.indexOf(l.id) >= 0;
-        lchips.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () {
-          d.l = on ? d.l.filter(function (x) { return x !== l.id; }) : d.l.concat([l.id]); save();
-        } }, l.emoji));
+        lchips.append(lblChip(l, lblState(d, l.id), function () { lblStep(d, l.id); save(); }));
       });
-      var act = labelDefs.filter(function (l) { return d.l.indexOf(l.id) >= 0; });
-      lSel.append(lchips, h("span", { class: "hint" }, act.length ? act.map(function (l) { return l.name; }).join(" oder ") : "egal"));
+      lSel.append(lchips, h("span", { class: "hint" }, lblHint(d)));
     }
     var week = {};
     var mon = weekStart(dn(ds));
     for (var j = 0; j < 7; j++) allDishes(plan[dnToStr(mon + j)]).forEach(function (x) { week[x.id] = true; });
     var info = dicePool(d, week), cur = (recipes || []).filter(function (r) { return r.id === d.cur; })[0];
-    var unknown = (d.tm || d.e || d.l.length) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
+    var unknown = (d.tm || d.e || d.l.length || d.x.length) ? (recipes || []).filter(function (r) { return !(Number(r.minutes) >= 1) && !(Number(r.effort) >= 1); }).length : 0;
     var box = h("div", { class: "dice" },
       tSel, eSel, lSel);
     if (!info.all.length) {
-      box.append(h("p", { class: "noneyet" }, (d.tm || d.e || d.l.length) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand, Dauer oder Labels oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
+      box.append(h("p", { class: "noneyet" }, (d.tm || d.e || d.l.length || d.x.length) ? "Kein Gericht passt zu diesen Wünschen. Ergänze im Kochbuch Aufwand, Dauer oder Labels oder lockere die Auswahl." : "Lege zuerst im Kochbuch ein Gericht an."));
     } else {
       if (cur) {
         var taken = slotsOf(plan[ds])[slot].some(function (x) { return x.id === cur.id; });
