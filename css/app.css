@@ -791,3 +791,12 @@ h1 { font-size: 2.1rem; letter-spacing: -0.02em; }
 .lchip.ex { opacity: 1; background: var(--bad, #b3261e); border-color: var(--bad, #b3261e); }
 .lchip.ex { position: relative; }
 .lchip.ex::after { content: ""; position: absolute; left: 20%; right: 20%; top: 50%; border-top: 2px solid #fff; transform: rotate(-20deg); }
+
+/* Bus explodiert */
+.bzbus.wreck { opacity: .55; filter: grayscale(1) drop-shadow(0 2px 2px rgba(0,0,0,.4)); transform: translateY(-40%) rotate(-14deg) scale(.92); transition: left .6s, transform .5s .15s, opacity .5s .15s; }
+.bzlane.isout .bzbtns button { opacity: .45; }
+.bzflash { position: absolute; font-size: 44px; line-height: 1; transform: translate(-50%,-50%); pointer-events: none; animation: bzflash .9s ease-out forwards; z-index: 3; }
+@keyframes bzflash { 0% { transform: translate(-50%,-50%) scale(.2); opacity: 1; } 35% { transform: translate(-50%,-50%) scale(1.5); opacity: 1; } 100% { transform: translate(-50%,-60%) scale(1.9); opacity: 0; } }
+.bzspark { position: absolute; width: 7px; height: 7px; border-radius: 50%; pointer-events: none; z-index: 3; animation: bzspark .75s ease-out forwards; }
+@keyframes bzspark { 0% { transform: translate(-50%,-50%) scale(1); opacity: 1; } 100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.3); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .bzflash, .bzspark { display: none; } .bzbus.wreck { transition: none; } }

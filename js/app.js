@@ -20,7 +20,7 @@
   var confirmDel = null;
   var togetherAsk = null;
   var newFollow = {};
-  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookTm = 0, cookEm = 0, openDish = {}, pickFOpen = false, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
+  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookX = [], cookTm = 0, cookEm = 0, openDish = {}, pickFOpen = false, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -1317,13 +1317,9 @@
         if (labelDefs.length) {
           var lc = h("span", { class: "lchips", role: "group", "aria-label": "Label, mindestens eines" });
           labelDefs.forEach(function (l) {
-            var on = cookL.indexOf(l.id) >= 0;
-            lc.append(h("button", { class: "lchip" + (on ? " on" : ""), type: "button", "aria-pressed": String(on), "aria-label": l.name, title: l.name, onclick: function () {
-              cookL = on ? cookL.filter(function (x) { return x !== l.id; }) : cookL.concat([l.id]); renderCook();
-            } }, l.emoji));
+            lc.append(lblChip(l, lblState({ l: cookL, x: cookX }, l.id), function () { var f = { l: cookL, x: cookX }; lblStep(f, l.id); cookL = f.l; cookX = f.x; renderCook(); }));
           });
-          var actL = labelDefs.filter(function (l) { return cookL.indexOf(l.id) >= 0; });
-          fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, actL.length ? actL.map(function (l) { return l.name; }).join(" oder ") : "egal")));
+          fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, lblHint({ l: cookL, x: cookX }))));
         }
         box.append(fr);
       }
@@ -1332,7 +1328,7 @@
       var list = recipes.filter(function (r) {
         var c = timeCat(r.minutes), e = Math.round(Number(r.effort)) || 0;
         if (!((!cookTm || (c >= 1 && c <= cookTm)) && (!cookEm || (e >= 1 && e <= cookEm)))) return false;
-        if (cl.length && !(Array.isArray(r.labels) && cl.some(function (id) { return r.labels.indexOf(id) >= 0; }))) return false;
+        if (!lblOk(r, cl, cookX)) return false;
         if (!q) return true;
         var hay = [r.name].concat((r.ingredients || []).map(function (g) { return g.name; }), labelsOf(r).map(function (l) { return l.name; })).join(" ").toLowerCase();
         return q.split(/\s+/).every(function (w) { return hay.indexOf(w) >= 0; });
@@ -3232,10 +3228,11 @@
   /* Platten: Ein falsch gerufener Bus steht, bis 10 richtige Punkte gesammelt sind. Erst danach zählen Punkte wieder als Felder. */
   function bzReplay(list, ids) {
     var st = {}, winner = null;
-    ids.forEach(function (id) { st[id] = { pos: 0, debt: 0, best: 0, wrong: 0 }; });
+    ids.forEach(function (id) { st[id] = { pos: 0, debt: 0, best: 0, wrong: 0, out: false }; });
     list.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0) || String(a.id).localeCompare(String(b.id)); }).forEach(function (e) {
-      var p = st[e.by]; if (!p) return;
-      if (e.kind === "wrong") { p.debt += BZ_REPAIR; p.wrong++; }
+      var p = st[e.by]; if (!p || p.out) return;
+      if (e.kind === "wrong" && p.debt > 0) { p.out = true; p.wrong++; }   // zweiter Fehler mit Platten: Bus explodiert
+      else if (e.kind === "wrong") { p.debt += BZ_REPAIR; p.wrong++; }
       else {
         var d = BZ_DELTA[e.kind], used = Math.min(p.debt, d);
         p.debt -= used; p.pos = Math.min(BZ_GOAL, p.pos + d - used);
@@ -3250,6 +3247,8 @@
   function busAdd(id, kind) {
     if (!db || busAll === null) return;
     var ts = todayStr(), ref = db.collection("bus").doc();
+    var cur0 = bzReplay(bzDayEvents(ts), bzPlayers(ts)).st[id];
+    if (cur0 && cur0.out) return;
     busWrite(ref.set({ t: "ev", date: ts, by: id, kind: kind, enteredBy: me || "", at: Date.now() }));
     var l = busLanes[id];
     if (l && (kind === "flower" || kind === "wrong")) {
@@ -3312,7 +3311,7 @@
         h("button", { class: "ok", type: "button", onclick: add("flower"), "aria-label": nm + ": KölleBus gesehen, plus 2" }, busIcon("flower"), "KölleBus", h("small", null, "+2 Felder")),
         h("button", { class: "no", type: "button", onclick: add("wrong"), "aria-label": nm + ": Falsch gesehen, Platten, minus 10" }, "❌ Falsch", h("small", null, "Platten (−10)"))));
     if (bzGuest(id)) head.append(h("button", { class: "linkbtn bzremove", type: "button", onclick: function () { busRemoveGuest(id); } }, "Gast entfernen"));
-    busLanes[id] = { box: box, bus: bus, tag: tag, road: road, score: score, flat: flat };
+    busLanes[id] = { box: box, bus: bus, tag: tag, road: road, score: score, flat: flat, wasOut: undefined };
     busShown[id] = 0;
     return box;
   }
@@ -3331,6 +3330,22 @@
         setTimeout(function () { p.remove(); }, 800);
       }, k * 100);
     })(i);
+  }
+  /* Explosion: Funken fliegen vom Bus weg */
+  function busBoom(l) {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var rb = l.road.getBoundingClientRect(), bb = l.bus.getBoundingClientRect();
+    var cx = bb.left - rb.left + bb.width / 2, cy = bb.top - rb.top + bb.height / 2;
+    var flash = h("span", { class: "bzflash", "aria-hidden": "true" }, "💥");
+    flash.style.left = cx + "px"; flash.style.top = cy + "px";
+    l.road.append(flash); setTimeout(function () { flash.remove(); }, 900);
+    var cols = ["#ffb300", "#ff6f00", "#e53935", "#ffe082", "#9e9e9e"];
+    for (var i = 0; i < 14; i++) {
+      var a = Math.random() * Math.PI * 2, r = 22 + Math.random() * 30, sp = h("span", { class: "bzspark", "aria-hidden": "true" });
+      sp.style.left = cx + "px"; sp.style.top = cy + "px"; sp.style.background = cols[i % cols.length];
+      sp.style.setProperty("--dx", (Math.cos(a) * r).toFixed(0) + "px"); sp.style.setProperty("--dy", (Math.sin(a) * r * 0.7).toFixed(0) + "px");
+      l.road.append(sp); (function (n) { setTimeout(function () { n.remove(); }, 800); })(sp);
+    }
   }
   function busPlace(id, pos, back) {
     var l = busLanes[id], w = l.road.clientWidth, trackW = w - 44, busW = 46;
@@ -3353,10 +3368,17 @@
       l.score.textContent = p.pos + " von " + BZ_GOAL + " Feldern";
       l.road.setAttribute("aria-label", bzName(id) + " steht auf Feld " + p.pos + " von " + BZ_GOAL + (p.debt ? ", Platten" : ""));
       busPlace(id, p.pos, p.pos < busShown[id]); busShown[id] = p.pos;
-      l.bus.classList.toggle("isflat", p.debt > 0);
-      l.flat.classList.toggle("show", p.debt > 0);
+      if (p.out) l.score.textContent = "ausgeschieden";
+      if (l.wasOut === false && p.out) busBoom(l);
+      l.wasOut = p.out;
+      l.bus.classList.toggle("wreck", p.out);
+      l.box.classList.toggle("isout", p.out);
+      l.box.querySelectorAll(".bzbtns button").forEach(function (b) { b.disabled = p.out; });
+      l.bus.classList.toggle("isflat", p.debt > 0 && !p.out);
+      l.flat.classList.toggle("show", p.debt > 0 || p.out);
       l.flat.replaceChildren();
-      if (p.debt > 0) {
+      if (p.out) l.flat.append("💥 Der Bus ist explodiert – für heute ausgeschieden.");
+      else if (p.debt > 0) {
         var blocks = Math.ceil(p.debt / BZ_REPAIR), earned = blocks * BZ_REPAIR - p.debt, dots = h("span", { class: "bzdots", "aria-hidden": "true" });
         for (var i = 0; i < BZ_REPAIR; i++) dots.append(h("i", { class: i < earned ? "on" : "" }));
         l.flat.append("🔧 Platten! Noch " + p.debt + " richtige Punkte" + (blocks > 1 ? " (" + blocks + " Platten)" : "") + ", dann fährt der Bus weiter.", dots);
