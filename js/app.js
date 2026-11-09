@@ -20,7 +20,7 @@
   var confirmDel = null;
   var togetherAsk = null;
   var newFollow = {};
-  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookX = [], cookTm = 0, cookEm = 0, openDish = {}, pickFOpen = false, labelDefs = [], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
+  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookX = [], cookTm = 0, cookEm = 0, openDish = {}, pickFOpen = false, labelDefs = [{ id: "_side", emoji: "🥣", name: "Beilage" }], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -1344,12 +1344,17 @@
   }
   /* Labels: Emoji-Kennzeichen für Gerichte, gespeichert als besonderer Eintrag im Essensplan */
   var LABEL_IDEAS = [["🍔", "Fast Food"], ["🥗", "Healthy"], ["🌱", "Vegetarisch"], ["🥩", "Fleisch"], ["🐟", "Fisch"], ["🍝", "Pasta"], ["🍰", "Süß"], ["🌶️", "Scharf"], ["💰", "Günstig"], ["🎉", "Für Gäste"]];
+  function labelDefsOwn() { return labelDefs.filter(function (l) { return l.id !== "_side"; }); }
+  var SIDE_DEF = { id: "_side", emoji: "🥣", name: "Beilage" };
+  function isSide(r) { return Array.isArray(r.labels) && r.labels.indexOf("_side") >= 0; }
   function saveLabels(list) {
+    list = list.filter(function (l) { return l.id !== "_side"; });
     if (!db) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return Promise.resolve(); }
-    labelDefs = list; renderCook();
+    labelDefs = list.concat([SIDE_DEF]); renderCook();
     return db.doc("plan/_labels").set({ list: list, at: Date.now() }).catch(writeFail);
   }
   function renderLabels() {
+    var labelDefs = labelDefsOwn();
     var box = $("cooklabels");
     box.replaceChildren();
     var panel = h("div", { class: "panel" });
@@ -1629,8 +1634,8 @@
     var dishes = st[slot], out = st["out" + Cap];
     var key = ds + "|" + slot;
     var menuOpen = !!pickDay && String(pickDay).indexOf(key + "|") === 0;
-    var box = h("div", { class: "slot" }, h("div", { class: "slabel" },
-      h("button", { class: "slotbtn", type: "button", "aria-expanded": String(menuOpen), "aria-label": SLOT_NAMES[slot], onclick: function () { pickDay = menuOpen ? null : key + "|menu"; renderMeal(); } }, slot === "lunch" ? "M:" : "A:", h("span", { class: "chev", "aria-hidden": "true" }, menuOpen ? "▾" : "▸")), sfActive(getSF(ds, slot)) ? h("span", { class: "fset", title: "Gemerkte Filter für diesen Wochentag" }, "⚙") : null, dishes.length && st["listed" + Cap] ? h("span", { class: "listed", title: "Zutaten sind auf den Einkaufslisten" }, " ✓ Zutaten geprüft") : null));
+    var box = h("div", { class: "slot" });
+    var plus = h("button", { class: "slotplus" + (menuOpen ? " on" : ""), type: "button", "aria-expanded": String(menuOpen), "aria-label": SLOT_NAMES[slot] + ": Optionen zum Hinzufügen", onclick: function () { pickDay = menuOpen ? null : key + "|menu"; renderMeal(); } }, menuOpen ? "×" : "+");
     var chips = h("div", { class: "mealchips" });
     if (out) {
       var note = st["note" + Cap];
@@ -1643,13 +1648,24 @@
     dishes.forEach(function (d, idx) {
       var rec = (recipes || []).filter(function (r) { return r.id === d.id; })[0];
       var nm = rec ? rec.name : d.name;
-      chips.append(h("span", { class: "meal" }, nm, miniScales(rec),
+      var who = d.who === "F" || d.who === "C" ? d.who : "";
+      var whoBtn = h("button", { class: "whob" + (who ? " w" + who : ""), type: "button",
+        "aria-label": nm + ": " + (who ? "nur " + who : "für beide") + ". Tippen zum Ändern", title: who ? "Nur " + who : "Für beide (tippen: F, C, beide)",
+        onclick: function () {
+          var nx = who === "" ? "F" : who === "F" ? "C" : "";
+          var cur = slotsOf(plan[ds]);
+          cur[slot] = cur[slot].map(function (x, j) { if (j !== idx) return x; var y = Object.assign({}, x); if (nx) y.who = nx; else delete y.who; return y; });
+          saveDay(ds, cur);
+          plan[ds] = Object.assign({}, plan[ds] || {}, { lunch: cur.lunch, dinner: cur.dinner });
+          renderMeal();
+        } }, who || "F·C");
+      chips.append(h("span", { class: "meal" + (d.side ? " side" : "") + (who ? " by" + who : "") }, whoBtn, (d.side ? "+ " : "") + nm, miniScales(rec),
         h("button", { class: "x", type: "button", "aria-label": nm + " aus dem Plan nehmen", onclick: function () {
           var cur = slotsOf(plan[ds]); cur[slot] = cur[slot].filter(function (_, j) { return j !== idx; }); saveDay(ds, cur);
         } }, "×")));
     });
-    if (chips.children.length) box.append(chips);
-    else if (pickDay !== key + "|dish" && !/\|out$/.test(String(pickDay))) box.append(h("p", { class: "noneyet" }, "Noch nichts geplant"));
+    if (!chips.children.length) chips.append(h("span", { class: "noneyet" }, "Noch nichts geplant"));
+    box.append(h("div", { class: "srow" }, h("span", { class: "slbl", title: SLOT_NAMES[slot] }, slot === "lunch" ? "M:" : "A:"), chips, plus));
 
     if (pickDay === key + "|dish") {
       var sf = getSF(ds, slot);
@@ -1664,6 +1680,7 @@
             var c = timeCat(r.minutes), e = Math.round(Number(r.effort)) || 0;
             if (sf.tm && !(c >= 1 && c <= sf.tm)) return false;
             if (sf.em && !(e >= 1 && e <= sf.em)) return false;
+            if (isSide(r) && ls.indexOf("_side") < 0) return false;
             if (!lblOk(r, ls, sf.x)) return false;
             if (!q) return true;
             var hay = [r.name].concat((r.ingredients || []).map(function (g) { return g.name; }), labelsOf(r).map(function (l) { return l.name; })).join(" ").toLowerCase();
@@ -1702,6 +1719,33 @@
         fill();
       }
     }
+    if (pickDay === key + "|side") {
+      var sides = (recipes || []).filter(isSide);
+      if (!sides.length) box.append(h("p", { class: "noneyet" }, "Noch keine Beilagen. Gib im Kochbuch einem Gericht das Label „🥣 Beilage“."));
+      else {
+        var sIn = h("input", { type: "search", maxlength: "60", autocomplete: "off", placeholder: "Beilage suchen …", "aria-label": "Beilage suchen", value: pickF.q });
+        var sk = h("div", { class: "picker" });
+        var sFill = function () {
+          sk.replaceChildren();
+          var q = pickF.q.trim().toLowerCase();
+          var res = sides.filter(function (r) { return !q || String(r.name).toLowerCase().indexOf(q) >= 0; }).sort(function (x, y) { return String(x.name).localeCompare(String(y.name), "de"); });
+          if (!res.length) sk.append(h("p", { class: "noneyet" }, "Keine Beilage passt zur Suche."));
+          res.forEach(function (r) {
+            sk.append(h("button", { class: "bchip", type: "button", onclick: function () {
+              pickDay = null;
+              var cur = slotsOf(plan[ds]);
+              if (cur[slot].some(function (x) { return x.id === r.id; })) { renderMeal(); return; }
+              cur[slot] = cur[slot].concat([{ id: r.id, name: r.name, side: true }]);
+              cur["out" + Cap] = false; cur["note" + Cap] = ""; cur["listed" + Cap] = false;
+              saveDay(ds, cur); renderMeal();
+            } }, r.name));
+          });
+        };
+        sIn.addEventListener("input", function (e) { pickF.q = e.target.value; sFill(); });
+        box.append(h("div", { class: "searchrow" }, sIn), sk);
+        sFill();
+      }
+    }
     var mk = ["out"].filter(function (k) { return pickDay === key + "|" + k; })[0];
     if (mk) {
       var ph = { out: "Wo? z. B. bei Oma (kann leer bleiben)", snack: "Was? z. B. Obst (kann leer bleiben)", prep: "Was wird vorbereitet? (kann leer bleiben)" }[mk];
@@ -1719,6 +1763,8 @@
     var acts = h("div", { class: "slotact" });
     var open1 = pickDay === key + "|dish", open3 = pickDay === key + "|dice";
     acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open1 ? null : key + "|dish"; renderMeal(); } }, open1 ? "Schließen" : "+ Gericht"));
+    var open4 = pickDay === key + "|side";
+    acts.append(h("button", { class: "linkbtn", type: "button", onclick: function () { pickDay = open4 ? null : key + "|side"; renderMeal(); } }, open4 ? "Schließen" : "+ Beilage"));
     acts.append(h("button", { class: "linkbtn", type: "button", "aria-label": SLOT_NAMES[slot] + " auswürfeln", onclick: function () { pickDay = open3 ? null : key + "|dice"; renderMeal(); } }, open3 ? "Schließen" : "🎲"));
     if (!out) ["out"].forEach(function (k) {
       var o = pickDay === key + "|" + k;
@@ -1911,6 +1957,7 @@
       if (d.tm && !(timeCat(r.minutes) >= 1 && timeCat(r.minutes) <= d.tm)) return false;
       if (d.e && !(Number(r.effort) >= 1 && Number(r.effort) <= d.e)) return false;
       var dl = d.l.filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
+      if (isSide(r) && dl.indexOf("_side") < 0) return false;
       return lblOk(r, dl, d.x || []);
     });
     var fresh = all.filter(function (r) { return !plannedWeek[r.id]; });
@@ -1979,9 +2026,9 @@
   function dayEl(n, ds, today) {
     var open = !!mealOpen[ds];
     var cls = "day nd" + (n === today ? " today" : "") + (n < today ? " past" : "") + (open ? "" : " folded");
-    var head = h("div", { class: "dayhead" },
+    var head = h("div", { class: "dayhead", onclick: function () { if (open && pickDay && String(pickDay).indexOf(ds + "|") === 0) pickDay = null; mealOpen[ds] = !open; renderMeal(); } },
       h("span", { class: "dtitle" }, h("b", null, WD[(n + 3) % 7]), h("span", null, dayLabel(n))),
-      h("button", { class: "dtog", type: "button", "aria-expanded": String(open), "aria-label": WD[(n + 3) % 7] + " " + dayLabel(n) + (open ? " zuklappen" : " aufklappen"), onclick: function () { mealOpen[ds] = !open; renderMeal(); } }, open ? "▾" : "▸"));
+      h("button", { class: "dtog", type: "button", "aria-expanded": String(open), "aria-label": WD[(n + 3) % 7] + " " + dayLabel(n) + (open ? " zuklappen" : " aufklappen"), }, open ? "▾" : "▸"));
     if (!open) {
       var st = slotsOf(plan[ds]);
       var part = function (sl, tag) {
@@ -1989,7 +2036,8 @@
         if (!st[sl].length) { row.append(st["out" + c] ? "Auswärts" : "–"); return row; }
         st[sl].forEach(function (d, i) {
           var rec = (recipes || []).filter(function (r) { return r.id === d.id; })[0];
-          row.append((i ? ", " : "") + (rec ? rec.name : d.name));
+          row.append((i ? (d.side ? " + " : ", ") : "") + (rec ? rec.name : d.name));
+          if (d.who === "F" || d.who === "C") row.append(" ", h("span", { class: "whob w" + d.who + " sm" }, d.who));
           var m = miniScales(rec); if (m) row.append(" ", m);
         });
         return row;
@@ -1998,7 +2046,10 @@
     }
     return h("div", { class: cls }, head, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
   }
+  var lastDishKey = null;
   function renderMeal() {
+    var dk = /\|(dish|side)$/.test(String(pickDay)) ? pickDay : null;
+    if (dk !== lastDishKey) { pickF.q = ""; lastDishKey = dk; }
     var box = $("mealdays");
     box.replaceChildren(); $("mealtools").replaceChildren();
     var mon = weekStart(dn(todayStr())) + weekOffset * 7;
@@ -3515,7 +3566,7 @@
       var fd = m._filters; delete m._filters;
       slotFilters = fd && fd.map && typeof fd.map === "object" ? fd.map : {};
       var ld = m._labels; delete m._labels;
-      labelDefs = ld && Array.isArray(ld.list) ? ld.list.filter(function (l) { return l && typeof l.id === "string" && typeof l.emoji === "string" && typeof l.name === "string"; }) : [];
+      labelDefs = ld && Array.isArray(ld.list) ? ld.list.filter(function (l) { return l && typeof l.id === "string" && l.id !== "_side" && typeof l.emoji === "string" && typeof l.name === "string"; }).concat([SIDE_DEF]) : [SIDE_DEF];
       plan = m; planLoaded = true;
       renderCookStats(); renderMeal();
       renderCook();

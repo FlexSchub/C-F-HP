@@ -800,3 +800,30 @@ h1 { font-size: 2.1rem; letter-spacing: -0.02em; }
 .bzspark { position: absolute; width: 7px; height: 7px; border-radius: 50%; pointer-events: none; z-index: 3; animation: bzspark .75s ease-out forwards; }
 @keyframes bzspark { 0% { transform: translate(-50%,-50%) scale(1); opacity: 1; } 100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.3); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .bzflash, .bzspark { display: none; } .bzbus.wreck { transition: none; } }
+
+.day.nd .dayhead { cursor: pointer; }
+/* Putzplan: schmalere Aufgabenfelder */
+li.task { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; padding: 6px 10px; align-items: center; }
+li.task .check { width: 36px; height: 36px; min-width: 36px; min-height: 36px; }
+li.task .title { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
+li.task .side { gap: 4px; }
+li.task .tog { min-height: 30px; }
+
+/* Mahlzeit-Zeile: M:/A: links, Essen daneben, + rechts */
+.srow { display: flex; align-items: flex-start; gap: 10px; }
+.srow .slbl { flex: 0 0 auto; width: 1.6rem; padding-top: 10px; font-weight: 700; color: var(--muted); font-size: .95rem; }
+.srow .mealchips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 44px; }
+.srow .noneyet { margin: 0; color: var(--muted); font-size: .9rem; }
+.slotplus { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface); color: var(--accent); font-size: 1.5rem; line-height: 1; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.slotplus.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.day.nd .dmeals { align-items: stretch; }
+.day.nd .dmeals .slot { width: 100%; }
+.meal.side { background: var(--surface); border-style: dashed; font-weight: 500; }
+
+/* Essen pro Person */
+.whob { border: 0; border-radius: 999px; min-width: 34px; height: 28px; padding: 0 8px; margin-right: 6px; font-size: .72rem; font-weight: 800; letter-spacing: .02em; background: var(--line); color: var(--muted); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.whob.wF { background: var(--f); color: #fff; }
+.whob.wC { background: var(--c); color: #fff; }
+.whob.sm { min-width: 0; height: auto; padding: 1px 6px; margin: 0; font-size: .68rem; vertical-align: middle; }
+.meal.byF { border-color: var(--f); background: var(--f-soft); }
+.meal.byC { border-color: var(--c); background: var(--c-soft); }
