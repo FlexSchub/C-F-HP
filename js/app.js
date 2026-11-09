@@ -1115,7 +1115,6 @@
     $("recform").hidden = m !== "edit";
     try { window.scrollTo(0, 0); } catch (e) {}
   }
-  function effortText(n) { n = Math.round(Number(n)); if (!(n >= 1 && n <= 5)) return ""; return "●".repeat(n) + "○".repeat(5 - n); }
   var EFFORT_NAMES = ["", "sehr leicht", "leicht", "mittel", "aufwendig", "sehr aufwendig"];
   var TIME_CATS = [
     { label: "unter 15 Min", short: "< 15 Min", rep: 10, max: 14 },
@@ -1172,8 +1171,6 @@
     ls.forEach(function (l) { box.append(h("span", { class: "dlabel", role: "img", "aria-label": l.name, title: l.name }, l.emoji)); });
     return box;
   }
-  function timeLabel(m) { var c = timeCat(m); return c ? TIME_CATS[c - 1].short : ""; }
-  function minutesText(m) { m = Math.round(Number(m)); if (!(m >= 1)) return ""; return m >= 60 ? Math.floor(m / 60) + " Std" + (m % 60 ? " " + (m % 60) + " Min" : "") : m + " Min"; }
   var KIND_NAMES = { "": "Zutat", opt: "Optional (Topping, Extra)", stock: "Immer da (Gewürz, Vorrat)" };
   function kindOf(g) { return g && (g.k === "opt" || g.k === "stock") ? g.k : ""; }
   function mainIngs(r) { return (r.ingredients || []).filter(function (g) { return !kindOf(g); }); }
@@ -1321,7 +1318,11 @@
           });
           fr.append(h("div", { class: "scrow" }, h("span", { class: "zl" }, "Label"), lc, h("span", { class: "hint" }, lblHint({ l: cookL, x: cookX }))));
         }
-        box.append(fr);
+        var nF = (cookTm ? 1 : 0) + (cookEm ? 1 : 0) + cookL.length + cookX.length;
+        var fdet = h("details", { class: "group fold cookfilter" }, h("summary", null, h("h2", null, "Filter", nF ? h("span", { class: "n" }, String(nF)) : null, h("span", { class: "hint" }, " Zeit · Aufwand · Label")), h("span", { class: "chev", "aria-hidden": "true" })), fr);
+        fdet.open = lsGet("pp-fold-cookfilter") === "1";
+        fdet.addEventListener("toggle", function () { lsSet("pp-fold-cookfilter", fdet.open ? "1" : "0"); });
+        box.append(fdet);
       }
       var cl = cookL.filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
       var q = cookQ.trim().toLowerCase();
@@ -2046,6 +2047,7 @@
     }
     return h("div", { class: cls }, head, h("div", { class: "dmeals" }, slotEl(ds, "lunch"), slotEl(ds, "dinner")));
   }
+  try { localStorage.removeItem("pp-dice-lunch"); localStorage.removeItem("pp-dice-dinner"); } catch (e) {}
   var lastDishKey = null;
   function renderMeal() {
     var dk = /\|(dish|side)$/.test(String(pickDay)) ? pickDay : null;
@@ -2911,7 +2913,10 @@
           h("button", { class: "x", type: "button", "aria-label": "Ausgabe löschen", onclick: function () { delSpend(s); } }, "×"),
           h("span", { class: "sm" }, meta)));
       });
-      lst.append(h("section", { class: "group" }, h("h2", null, "Ausgaben-Verlauf", h("span", { class: "n" }, String(mine.length))), ul));
+      var sdet = h("details", { class: "group fold" }, h("summary", null, h("h2", null, "Ausgaben-Verlauf", h("span", { class: "n" }, String(mine.length))), h("span", { class: "chev", "aria-hidden": "true" })), ul);
+      sdet.open = lsGet("pp-fold-spend") !== "0";
+      sdet.addEventListener("toggle", function () { lsSet("pp-fold-spend", sdet.open ? "1" : "0"); });
+      lst.append(sdet);
     }
     renderCats(cats, mine, spent);
   }
