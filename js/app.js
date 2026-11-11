@@ -25,8 +25,7 @@
   var period = "30";
   var view = "plan";
   var toastTimer = null;
-  var sv = lsGet("pp-section");
-  var section = sv === "shop" || sv === "cook" || sv === "meal" || sv === "cal" || sv === "spend" || sv === "bus" || sv === "putz" ? sv : "home";
+  var section = "home";   // beim Öffnen immer die Startseite
   var events = [], eventsLoaded = false;
   var calOpen = {};
   var calMode = lsGet("pp-calmode") === "week" ? "week" : "month";
@@ -35,6 +34,7 @@
   var budgets = null;        // null = lädt noch
   var spends = [];
   var curBudget = lsGet("pp-budget");
+  var budgetAuto = false;
   var budgetForm = null;     // null | "new" | "edit"
   var confirmBudgetDel = false;
   var formBudget = null;     // für welches Budget das Datum im Formular gesetzt wurde
@@ -690,6 +690,43 @@
       db.doc("shop/" + g.id).update(upd).catch(writeFail);
     });
   }
+  /* Einkauf fertig? Dann nachfragen, ob die Ausgabe ins Budget soll */
+  var budgetAsked = {};
+  function maybeAskBudget(it) {
+    var sid = it.store;
+    var open = items.filter(function (i) { return i.store === sid && !i.done && i.id !== it.id && !(it.grp && i.grp === it.grp); });
+    if (open.length) return;
+    if (budgetAsked[sid] && Date.now() - budgetAsked[sid] < 4 * 3600 * 1000) return;
+    budgetAsked[sid] = Date.now();
+    setTimeout(function () { askBudget(sid); }, 350);
+  }
+  function askBudget(sid) {
+    if (document.getElementById("budgetask")) return;
+    var name = storeName(sid) || "Einkauf";
+    var prev = document.activeElement;
+    var close = function () { var m = document.getElementById("budgetask"); if (m) m.remove(); document.removeEventListener("keydown", onKey); try { if (prev && prev.focus) prev.focus(); } catch (e) {} };
+    var onKey = function (e) { if (e.key === "Escape") close(); };
+    var yes = h("button", { class: "primary", type: "button", onclick: function () {
+      close();
+      goSection("spend", function () {
+        if (!resolveBudget()) return;
+        spendOpen = true; renderSpend();
+        if (!$("splace").value) $("splace").value = name;
+        if (!$("swhat").value) $("swhat").value = "Einkauf";
+        if (!$("scat").value) $("scat").value = "Lebensmittel";
+        $("samount").focus();
+      });
+    } }, "Ja, Ausgabe eintragen");
+    var no = h("button", { class: "linkbtn", type: "button", onclick: close }, "Nicht jetzt");
+    var dlg = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "budgetask-t" },
+      h("h2", { id: "budgetask-t" }, "Einkauf bei " + name + " fertig?"),
+      h("p", null, "Alles abgehakt. Möchtest du die Kosten gleich ins Budget eintragen? Du kommst dann direkt zu „Ausgabe eintragen“."),
+      h("div", { class: "row" }, yes, no));
+    var back = h("div", { class: "modalback", id: "budgetask", onclick: function (e) { if (e.target === back) close(); } }, dlg);
+    document.body.append(back);
+    document.addEventListener("keydown", onKey);
+    yes.focus();
+  }
   function delItem(it) { if (db) db.doc("shop/" + it.id).delete().catch(writeFail); }
   function addItems(text) {
     if (!db || !curStore) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
@@ -942,7 +979,7 @@
       var sortRow = h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: function () { aisleSort = !aisleSort; lsSet("pp-aisle", aisleSort ? "on" : "off"); renderShop(); } }, aisleSort ? "Sortiert nach Gang im Laden · ändern" : "Sortiert nach Hinzufügen · ändern"));
       body.append(sortRow);
       var mkRow = function (it) {
-        var chk = h("button", { class: "check", type: "button", "aria-label": "Gekauft: " + it.name, onclick: function () { setDone(it, true); } });
+        var chk = h("button", { class: "check", type: "button", "aria-label": "Gekauft: " + it.name, onclick: function () { setDone(it, true); maybeAskBudget(it); } });
         chk.innerHTML = CHECK;
         if (editItemId === it.id) return editItemRow(it, chk);
         return h("li", null, chk,
@@ -966,7 +1003,7 @@
     }
 
     if (done.length || favEl || stockEl) {
-      body.append(h("div", { class: "shopeditrow" }, h("button", { class: "linkbtn", type: "button", onclick: function () { doneEdit = !doneEdit; editItemId = null; chipEdit = null; renderShop(); } }, doneEdit ? "Fertig" : "Einzelne bearbeiten")));
+      body.append(h("div", { class: "shopeditrow" }, done.length ? h("button", { class: "linkbtn", type: "button", onclick: function () { askBudget(st.id); } }, "Ausgabe eintragen") : null, h("button", { class: "linkbtn", type: "button", onclick: function () { doneEdit = !doneEdit; editItemId = null; chipEdit = null; renderShop(); } }, doneEdit ? "Fertig" : "Einzelne bearbeiten")));
     }
     if (done.length || favEl) {
       var chips = null;
@@ -1451,6 +1488,10 @@
       h("p", { class: "fair" }, "Hake an, was ihr noch auf Vorrat habt. Alles andere kommt auf die Einkaufslisten."));
     if (!rows.length) {
       panel.append(h("p", { class: "note" }, extras.length ? "Die gewählten Gerichte haben keine festen Zutaten." : "Die gewählten Gerichte haben noch keine Zutaten."));
+    }
+    if (rows.length > 1) {
+      var allHome = rows.every(function (r) { return r.home; });
+      panel.append(h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: function () { rows.forEach(function (r) { r.home = !allHome; }); renderPantry(); } }, allHome ? "Alle wieder abwählen" : "✓ Alle abhaken")));
     }
     var ids = sortedStores().map(function (s) { return s.id; });
     if (rows.some(function (r) { return ids.indexOf(r.store) < 0; })) ids.push("");
@@ -3578,7 +3619,9 @@
     });
     listen("budgets", function (a) {
       budgets = a;
-      if (!budgets.length && !budgetForm) openBudgetForm("new", null);
+      if (!budgets.length && !budgetForm) { openBudgetForm("new", null); budgetAuto = true; }
+      else if (budgets.length && budgetAuto && budgetForm === "new") { budgetForm = null; }
+      if (budgets.length) budgetAuto = false;
       renderSpend();
       ensureRepeats();
     });

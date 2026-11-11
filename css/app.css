@@ -813,3 +813,14 @@ li.task .tog { min-height: 30px; }
 .meal.byC { border-color: var(--c); background: var(--c-soft); }
 .cookfilter summary .hint { font-weight: 400; font-size: .8rem; }
 .cookfilter { margin-bottom: 8px; }
+
+/* Pop-up Budget */
+.modalback { position: fixed; inset: 0; background: rgba(16, 26, 25, .5); display: flex; align-items: flex-end; justify-content: center; padding: 16px; z-index: 50; }
+.modal { background: var(--surface); color: var(--ink); width: 100%; max-width: 420px; border-radius: 24px; padding: 22px; box-shadow: 0 16px 48px rgba(0,0,0,.3); animation: modalin .2s ease-out; }
+.modal h2 { margin: 0 0 8px; font-size: 1.25rem; }
+.modal p { margin: 0 0 16px; color: var(--muted); }
+.modal .row { display: flex; flex-direction: column; gap: 8px; }
+.modal .row .primary, .modal .row .linkbtn { width: 100%; min-height: 48px; }
+.shopeditrow { justify-content: space-between; }
+@keyframes modalin { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .modal { animation: none; } }
