@@ -20,7 +20,7 @@
   var confirmDel = null;
   var togetherAsk = null;
   var newFollow = {};
-  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookX = [], cookTm = 0, cookEm = 0, openDish = {}, pickFOpen = false, labelDefs = [{ id: "_side", emoji: "🥣", name: "Beilage" }], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
+  var pickF = { q: "", tm: 0, em: 0, l: [] }, cookQ = "", cookL = [], cookX = [], cookTm = 0, cookEm = 0, openDish = {}, openRec = {}, pickFOpen = false, labelDefs = [{ id: "_side", emoji: "🥣", name: "Beilage" }], confirmLabelDel = null, newLabel = { emoji: "", name: "" };
   var confirmExamples = false;
   var period = "30";
   var view = "plan";
@@ -1232,6 +1232,8 @@
       body.append(
         h("div", { class: "dcount" }, ings.length + (ings.length === 1 ? " Zutat" : " Zutaten") + (nExtra ? " + " + nExtra + " Extra" + (nExtra === 1 ? "" : "s") : "")),
         h("p", { class: "dings" }, ingLine(r) || "Noch keine Zutaten eingetragen."),
+        r.recipe ? h("button", { class: "linkbtn recbtn", type: "button", "aria-expanded": String(!!openRec[r.id]), onclick: function () { if (openRec[r.id]) delete openRec[r.id]; else openRec[r.id] = true; renderCook(); } }, openRec[r.id] ? "📖 Rezept ausblenden" : "📖 Rezept anzeigen") : null,
+        r.recipe && openRec[r.id] ? h("p", { class: "rectext" }, r.recipe) : null,
         h("button", { class: "linkbtn dedit", type: "button", onclick: function () { openEditor(r); } }, "Bearbeiten"));
     }
     return h("li", { class: "dish" + (on ? " on" : "") }, pick, body);
@@ -1548,9 +1550,9 @@
   function openEditor(r) {
     confirmRecDel = false;
     if (r) {
-      draft = { id: r.id, labels: Array.isArray(r.labels) ? r.labels.slice() : [], name: r.name || "", at: r.at || 0, effort: Math.round(Number(r.effort)) || 0, minutes: Math.round(Number(r.minutes)) || 0, ings: (r.ingredients || []).map(function (g) { return { name: g.name || "", store: resolveStore(g.store), touched: true, k: kindOf(g) }; }) };
+      draft = { id: r.id, labels: Array.isArray(r.labels) ? r.labels.slice() : [], name: r.name || "", at: r.at || 0, effort: Math.round(Number(r.effort)) || 0, minutes: Math.round(Number(r.minutes)) || 0, recipe: String(r.recipe || ""), ings: (r.ingredients || []).map(function (g) { return { name: g.name || "", store: resolveStore(g.store), touched: true, k: kindOf(g) }; }) };
     } else {
-      draft = { id: null, labels: [], name: "", at: 0, effort: 0, minutes: 0, ings: [] };
+      draft = { id: null, labels: [], name: "", at: 0, effort: 0, minutes: 0, recipe: "", ings: [] };
     }
     if (!draft.ings.length) draft.ings.push({ name: "", store: resolveStore(curStore), touched: false });
     setCookMode("edit");
@@ -1585,6 +1587,8 @@
       });
       panel.append(h("div", { class: "fl" }, h("span", null, "Labels"), lc));
     } else panel.append(h("p", { class: "hint" }, "Tipp: Unter „Labels“ im Kochbuch kannst du Emoji-Labels wie 🍔 oder 🥗 anlegen."));
+    panel.append(h("div", { class: "fl" }, h("span", null, "Rezept (optional)"),
+      h("textarea", { id: "recbody", class: "rectarea", rows: "6", maxlength: "4000", placeholder: "Zubereitung, Tipps, Link …", "aria-label": "Rezept", oninput: function (e) { draft.recipe = e.target.value; } }, draft.recipe || "")));
     panel.append(h("h2", null, "Zutaten und Laden"));
     draft.ings.forEach(function (g, idx) {
       var sel = h("select", { "aria-label": "Laden für Zutat " + (idx + 1), onchange: function (e) { g.store = e.target.value; g.touched = true; } });
@@ -1647,9 +1651,10 @@
     var mins = Math.round(Number(draft.minutes)) || 0;
     if (mins < 0 || mins > 1440) { toast("Die Dauer sollte zwischen 1 und 1440 Minuten liegen."); return; }
     var eff = Math.round(Number(draft.effort)) || 0;
+    var rtxt = String(draft.recipe || "").trim().slice(0, 4000);
     var lbl = (draft.labels || []).filter(function (id) { return labelDefs.some(function (l) { return l.id === id; }); });
-    if (draft.id) p = db.doc("recipes/" + draft.id).update({ name: name, ingredients: ings, example: false, effort: eff, minutes: mins, labels: lbl });
-    else p = db.collection("recipes").add({ name: name, ingredients: ings, at: Date.now(), effort: eff, minutes: mins, labels: lbl });
+    if (draft.id) p = db.doc("recipes/" + draft.id).update({ name: name, ingredients: ings, example: false, effort: eff, minutes: mins, labels: lbl, recipe: rtxt });
+    else p = db.collection("recipes").add({ name: name, ingredients: ings, at: Date.now(), effort: eff, minutes: mins, labels: lbl, recipe: rtxt });
     p.then(function () { setCookMode("list"); renderCook(); toast("„" + name + "“ ist gespeichert."); }).catch(writeFail);
   }
   function deleteRecipe() {
