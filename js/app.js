@@ -729,6 +729,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 78, t: ["Zurück-Taste des Handys: Sie führt jetzt zum vorherigen Bereich der App (z. B. zurück zum Putzplan) und wirft dich nicht mehr aus der App.", "Ausgaben: Tipp auf ein Stück im Kreisdiagramm (oder auf eine Kategorie in der Liste) öffnet die Kategorie und zeigt, welche Posten darunter fallen. „‹ Alle Kategorien“ führt zurück."] },
     { v: 77, t: ["Startseite: „überfällig“ und „heute“ kleben nicht mehr am rechten Rand."] },
     { v: 76, t: ["Kalender: „Woche“ ist jetzt ein Wochenraster mit Zeitstrahl links und Terminen als farbige Blöcke (F blau, C magenta, gemeinsam grün). Ganztägige und mehrtägige Termine stehen oben, die aktuelle Uhrzeit ist als orange Linie markiert.", "Tipp auf einen Block öffnet den Termin, Tipp auf eine freie Stelle legt dort einen neuen an.", "Die bisherige Tagesliste gibt es weiter unter „Liste“."] },
     { v: 75, t: ["Ausgaben: Pfeile ‹ › am Budget zum Wechseln zwischen vorherigem und nächstem Budget. Die obere Zeile ist weg, „+ Ausgabe“ ist farbig hervorgehoben.", "Ausgaben: Neue Statistik mit Kategorien oder Orten über die letzten Budget-Zeiträume.", "Kalender (Woche): Ein Tipp irgendwo auf die Kopfzeile eines vergangenen Tages klappt ihn auf oder zu.", "Bus-Rennen: „Regeln“ ist kleiner und klappt mit Pfeil auf.", "Einstellungen: Alle Karten sind klappbar.", "Über die App: Vollständiger Changelog."] },
@@ -1542,7 +1543,7 @@
     var back = !!pantryCtx;
     pantryCtx = null;
     setCookMode("list");
-    if (back) { section = "meal"; lsSet("pp-section", "meal"); syncControls(); renderMeal(); }
+    if (back) { histPush("meal"); section = "meal"; lsSet("pp-section", "meal"); syncControls(); renderMeal(); }
     renderCook();
   }
   function renderPantry() {
@@ -1606,7 +1607,7 @@
     if (!ids.length) { toast("Alles stand schon auf euren Listen."); return; }
     var parts = ids.map(function (id) { return storeName(id) + " " + counts[id]; }).join(", ");
     toast("Auf den Listen: " + parts + ".", "Zum Einkauf", function () {
-      section = "shop"; lsSet("pp-section", "shop");
+      histPush("shop"); section = "shop"; lsSet("pp-section", "shop");
       curStore = ids[0]; lsSet("pp-store", ids[0]);
       syncControls(); renderShop();
     });
@@ -2748,7 +2749,17 @@
   }
 
   /* ---------- Startseite „Heute“ ---------- */
-  function goSection(name, after) {
+  /* Zurück-Taste des Handys: führt zum vorherigen Bereich statt aus der App */
+  try { history.replaceState({ sec: section }, ""); } catch (e) {}
+  window.addEventListener("popstate", function (e) {
+    var sec = e.state && e.state.sec;
+    if (!sec) return;
+    var n = document.getElementById("newsbox"); if (n) n.remove();
+    goSection(sec, null, true);
+  });
+  function histPush(name) { if (name !== section) { try { history.pushState({ sec: name }, ""); } catch (e) {} } }
+  function goSection(name, after, fromPop) {
+    if (!fromPop) histPush(name);
     section = name; lsSet("pp-section", name);
     syncControls();
     if (name === "putz") render();
@@ -3001,47 +3012,71 @@
     }).catch(writeFail);
   }
 
+  var catDrill = null;
   function renderCats(box, mine, total) {
     box.replaceChildren();
     if (!mine.length) return;
     var map = {}, order = [];
+    var catOf = function (s) { return (String(s.category || "").trim() || "Sonstiges"); };
+    if (catDrill && !mine.some(function (s) { return catOf(s).toLowerCase() === catDrill; })) catDrill = null;
+    var drill = catDrill, catName = "", catTotal = 0;
+    if (drill) {
+      mine = mine.filter(function (s) { return catOf(s).toLowerCase() === drill; });
+      mine.forEach(function (s) { catName = catName || catOf(s); catTotal += s.amount || 0; });
+      total = catTotal;
+    }
     mine.forEach(function (s) {
-      var name = String(s.category || "").trim() || "Sonstiges";
+      var name = drill ? (String(s.what || "").trim() || "Ohne Beschreibung") : catOf(s);
       var key = name.toLowerCase();
-      if (!map[key]) { map[key] = { name: name, cents: 0, n: 0 }; order.push(key); }
+      if (!map[key]) { map[key] = { name: name, key: key, cents: 0, n: 0, places: [] }; order.push(key); }
       map[key].cents += s.amount || 0; map[key].n++;
+      var pl = String(s.place || "").trim();
+      if (pl && map[key].places.indexOf(pl) < 0) map[key].places.push(pl);
     });
     var rows = order.map(function (k) { return map[k]; }).sort(function (a, b) { return b.cents - a.cents || a.name.localeCompare(b.name, "de"); });
     if (rows.length > 8) {
       var rest = rows.slice(7);
       rows = rows.slice(0, 7).concat([{ name: "Weitere (" + rest.length + ")", cents: rest.reduce(function (a, r) { return a + r.cents; }, 0), n: rest.reduce(function (a, r) { return a + r.n; }, 0) }]);
     }
-    var svg = svgEl("svg", { class: "donut", viewBox: "0 0 42 42", role: "img", "aria-label": "Ausgaben nach Kategorie: " + rows.map(function (r) { return r.name + " " + pct(r.cents / total * 100); }).join(", ") });
+    var pick = function (r) { if (!drill && r.key) { catDrill = r.key; renderSpend(); } };
+    var svg = svgEl("svg", { class: "donut" + (drill ? "" : " pickable"), viewBox: "0 0 42 42", role: "img", "aria-label": "Ausgaben nach Kategorie: " + rows.map(function (r) { return r.name + " " + pct(r.cents / total * 100); }).join(", ") });
     svg.append(svgEl("circle", { class: "ring", cx: "21", cy: "21", r: "15.9155", "stroke-width": "6" }));
     var cum = 0;
     rows.forEach(function (r, i) {
       var p = r.cents / total * 100;
       if (p <= 0) return;
-      svg.append(svgEl("circle", { cx: "21", cy: "21", r: "15.9155", "stroke-width": "6",
+      var seg = svgEl("circle", { cx: "21", cy: "21", r: "15.9155", "stroke-width": "6",
         "stroke-dasharray": Math.max(p - 0.4, 0.2) + " " + (100 - Math.max(p - 0.4, 0.2)),
-        "stroke-dashoffset": String(25 - cum), style: "stroke:var(--k" + (i + 1) + ")" }));
+        "stroke-dashoffset": String(25 - cum), style: "stroke:var(--k" + (i + 1) + ")" });
+      if (!drill && r.key) {
+        seg.setAttribute("class", "seg-pick"); seg.setAttribute("tabindex", "0"); seg.setAttribute("role", "button");
+        seg.setAttribute("aria-label", r.name + " " + eur(r.cents) + ": Details anzeigen");
+        seg.addEventListener("click", function () { pick(r); });
+        seg.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(r); } });
+      }
+      svg.append(seg);
       cum += p;
     });
     var t1 = svgEl("text", { x: "21", y: "21.6", "font-size": "4.6" }); t1.textContent = eur(total);
-    var t2 = svgEl("text", { class: "sub", x: "21", y: "26.4", "font-size": "2.8" }); t2.textContent = "ausgegeben";
+    var t2 = svgEl("text", { class: "sub", x: "21", y: "26.4", "font-size": "2.8" }); t2.textContent = drill ? (catName.length > 14 ? catName.slice(0, 13) + "…" : catName) : "ausgegeben";
     svg.append(t1, t2);
 
     var table = h("table", { class: "cattable" });
-    table.append(h("thead", null, h("tr", null, h("th", null, "Kategorie"), h("th", { class: "r" }, "Betrag"), h("th", { class: "r" }, "Anteil"))));
+    table.append(h("thead", null, h("tr", null, h("th", null, drill ? "Posten" : "Kategorie"), h("th", { class: "r" }, "Betrag"), h("th", { class: "r" }, "Anteil"))));
     var tb = h("tbody");
     rows.forEach(function (r, i) {
       tb.append(h("tr", null,
-        h("td", null, h("div", { class: "cn-in" }, h("span", { class: "sw-dot", style: "background:var(--k" + (i + 1) + ")" }), h("span", null, r.name))),
+        h("td", null, h("div", { class: "cn-in" }, h("span", { class: "sw-dot", style: "background:var(--k" + (i + 1) + ")" }),
+          !drill && r.key ? h("button", { class: "cn-btn", type: "button", onclick: function () { pick(r); } }, r.name, h("span", { class: "cn-go", "aria-hidden": "true" }, "›"))
+            : h("span", null, r.name, r.n > 1 ? h("span", { class: "cn-sub" }, " ×" + r.n) : null, drill && r.places && r.places.length ? h("span", { class: "cn-sub cn-pl" }, r.places.slice(0, 2).join(", ")) : null))),
         h("td", { class: "r" }, eur(r.cents)),
         h("td", { class: "r" }, pct(r.cents / total * 100))));
     });
     table.append(tb);
-    box.append(h("div", { class: "panel" }, h("h2", null, "Nach Kategorie"), h("div", { class: "catwrap" }, svg, table)));
+    var ph = drill
+      ? h("div", { class: "cathead" }, h("button", { class: "linkbtn", type: "button", onclick: function () { catDrill = null; renderSpend(); } }, "‹ Alle Kategorien"), h("h2", null, catName))
+      : h("h2", null, "Nach Kategorie");
+    box.append(h("div", { class: "panel" }, ph, drill ? h("p", { class: "meta" }, mine.length + (mine.length === 1 ? " Ausgabe" : " Ausgaben") + " in dieser Kategorie") : h("p", { class: "meta" }, "Tippe auf ein Stück oder eine Kategorie für Details."), h("div", { class: "catwrap" }, svg, table)));
   }
 
   var spendOpen = false;
@@ -3253,10 +3288,10 @@
   syncNewInt();
 
   $("tabhome").addEventListener("click", function () { goSection("home"); });
-  $("tabputz").addEventListener("click", function () { section = "putz"; lsSet("pp-section", "putz"); syncControls(); });
-  $("tabshop").addEventListener("click", function () { section = "shop"; lsSet("pp-section", "shop"); syncControls(); renderShop(); });
+  $("tabputz").addEventListener("click", function () { goSection("putz"); });
+  $("tabshop").addEventListener("click", function () { goSection("shop"); });
   $("tabbus").addEventListener("click", function () { goSection("bus"); });
-  $("tabcal").addEventListener("click", function () { section = "cal"; lsSet("pp-section", "cal"); syncControls(); renderCal(); });
+  $("tabcal").addEventListener("click", function () { goSection("cal"); });
   $("calprev").addEventListener("click", function () { calStep(-1); });
   $("calnext").addEventListener("click", function () { calStep(1); });
   $("caltoday").addEventListener("click", function () { calAnchor = calSel = dn(todayStr()); renderCal(); });
@@ -3314,7 +3349,7 @@
     else { doc.by = me || ""; doc.at = Date.now(); p = db.collection("events").add(doc); }
     p.then(function () { calSel = dn(date); calAnchor = calSel; closeEv(); toast("„" + title + "“ ist im Kalender."); }).catch(writeFail);
   });
-  $("tabspend").addEventListener("click", function () { section = "spend"; lsSet("pp-section", "spend"); syncControls(); renderSpend(); });
+  $("tabspend").addEventListener("click", function () { goSection("spend"); });
   function stepBudget(dir) {   // dir -1 = vorheriges (älteres), +1 = nächstes (neueres)
     var list = sortedBudgets(), b = resolveBudget(); if (!b) return;
     var t = list[list.indexOf(b) - dir]; if (!t) return;
@@ -3390,8 +3425,8 @@
       if (v === "meal") { pickDay = null; goSection("meal"); } else if (v === "cook") goSection("cook");
     });
   });
-  $("tabmeal").addEventListener("click", function () { section = "meal"; lsSet("pp-section", "meal"); pickDay = null; syncControls(); renderMeal(); });
-  $("pickplan").addEventListener("click", function () { section = "meal"; lsSet("pp-section", "meal"); pickDay = null; syncControls(); renderMeal(); });
+  $("tabmeal").addEventListener("click", function () { pickDay = null; goSection("meal"); });
+  $("pickplan").addEventListener("click", function () { histPush("meal"); section = "meal"; lsSet("pp-section", "meal"); pickDay = null; syncControls(); renderMeal(); });
   $("weekprev").addEventListener("click", function () { weekOffset--; pickDay = null; renderMeal(); });
   $("weeknext").addEventListener("click", function () { weekOffset++; pickDay = null; renderMeal(); });
   $("weektoday").addEventListener("click", function () { weekOffset = 0; pickDay = null; renderMeal(); });
@@ -3400,7 +3435,7 @@
     picked = {};
     ids.forEach(function (id) { picked[id] = true; });
     pantryCtx = { slots: slots };
-    section = "cook"; lsSet("pp-section", "cook");
+    histPush("cook"); section = "cook"; lsSet("pp-section", "cook");
     syncControls();
     openPantry();
   }

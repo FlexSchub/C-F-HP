@@ -916,3 +916,12 @@ body.hasnetbar { padding-top: 34px; }
 .wg-hint { margin: 8px 4px 0; font-size: 0.72rem; }
 .soon .td { margin-right: 6px; }
 .soon li { padding-right: 10px; }
+
+.donut .seg-pick { cursor: pointer; pointer-events: stroke; outline: none; }
+.donut .seg-pick:hover, .donut .seg-pick:focus-visible { stroke-width: 7.4; }
+.cn-btn { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; padding: 4px 0; font: inherit; color: inherit; text-align: left; min-height: 32px; cursor: pointer; }
+.cn-btn .cn-go { color: var(--accent); font-weight: 700; }
+.cn-sub { color: var(--muted); font-size: 0.78rem; }
+.cn-pl { display: block; }
+.cathead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cathead h2 { margin: 0; }
