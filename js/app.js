@@ -729,6 +729,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 71, t: ["Neu: Tägliche Erinnerung um 8:00 Uhr mit den fälligen Aufgaben. Einschalten unter „Einstellungen und Daten“ → „Erinnerung um 8:00 Uhr“. Einmalige Einrichtung in Supabase nötig (siehe Anleitung Erinnerung)."] },
     { v: 70, t: ["Einkauf offline: Artikel hinzufügen, abhaken und löschen klappt auch ohne Netz. Die Änderungen werden gemerkt und automatisch gesendet, sobald wieder Verbindung da ist.", "Oben erscheint ein Hinweis, solange du offline bist oder Änderungen warten."] },
     { v: 69, t: ["Die App ist jetzt installierbar: In Chrome ⋮ → „App installieren“ wählen. Dann hat sie ein eigenes Icon und öffnet im Vollbild.", "Ohne Internet zeigt sie die zuletzt geladenen Daten an."] },
     { v: 68, t: ["Neu: Nach jedem Update zeigt ein Fenster, was sich geändert hat."] },
@@ -3635,6 +3636,64 @@
       if (section === "home") renderHome();
     }, function (e) { readFail(e); apply([]); });
   }
+  /* Tägliche Erinnerung (Web-Push). Der öffentliche Schlüssel darf offen stehen. */
+  var VAPID_PUBLIC = "BM2RUp0nrR1cKkzS-V9lPshlOf8lUHxDJeFgpdjLNr8_PWtWTur7lNU82ws_wYjqHqvucckUcYRXnUsui-Y_WUU";
+  function keyBytes(b64) {
+    var pad = "=".repeat((4 - b64.length % 4) % 4), raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function setupPush() {
+    var info = $("pushinfo"), row = $("pushrow"), tog = $("pushtoggle"), tst = $("pushtest"), who = $("pushwho");
+    if (!info) return;
+    if (!("serviceWorker" in navigator && "PushManager" in window && "Notification" in window)) {
+      info.textContent = "Dieses Gerät oder dieser Browser unterstützt keine Erinnerungen. Auf Android in Chrome klappt es."; return;
+    }
+    who.value = lsGet("pp-pushwho") || me || "F";
+    row.hidden = false;
+    var reg = null;
+    function show(sub) {
+      tog.textContent = sub ? "Ausschalten" : "Einschalten";
+      tst.hidden = !sub;
+      who.disabled = false;
+      if (Notification.permission === "denied") info.textContent = "Benachrichtigungen sind für diese Seite blockiert. Erlaube sie in Chrome: ⋮ → Einstellungen → Website-Einstellungen → Benachrichtigungen.";
+      else info.textContent = sub ? "Eingeschaltet: Jeden Morgen um 8:00 Uhr bekommt " + who.value + " eine Nachricht mit den fälligen Aufgaben." : "Aus. Wenn du es einschaltest, bekommt die gewählte Person jeden Morgen um 8:00 Uhr eine Nachricht, falls Aufgaben fällig sind.";
+    }
+    function current() { return navigator.serviceWorker.ready.then(function (r) { reg = r; return r.pushManager.getSubscription(); }); }
+    function fail(e) {
+      var c = e && e.code ? String(e.code) : "";
+      toast(c === "42P01" || c === "PGRST205" ? "Das einmalige Push-Update in Supabase fehlt noch (siehe Anleitung Erinnerung)." : "Das hat nicht geklappt" + (c ? " (" + c + ")" : "") + ". Versuch es gleich noch einmal.", null, null, true);
+    }
+    current().then(show).catch(function () { info.textContent = "Erinnerungen sind gerade nicht verfügbar."; });
+    tog.addEventListener("click", function () {
+      if (!db || !db.savePush) return;
+      current().then(function (sub) {
+        if (sub) {
+          return db.removePush(sub.endpoint).catch(function () {}).then(function () { return sub.unsubscribe(); }).then(function () { show(null); toast("Erinnerung ausgeschaltet."); });
+        }
+        return Notification.requestPermission().then(function (perm) {
+          if (perm !== "granted") { show(null); return; }
+          return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC) }).then(function (ns) {
+            var j = ns.toJSON();
+            return db.savePush({ endpoint: j.endpoint, keys: j.keys }, who.value).then(function () { lsSet("pp-pushwho", who.value); show(ns); toast("Erinnerung eingeschaltet für " + who.value + "."); }, function (e) { return ns.unsubscribe().then(function () { show(null); fail(e); }); });
+          });
+        });
+      }).catch(fail);
+    });
+    who.addEventListener("change", function () {
+      lsSet("pp-pushwho", who.value);
+      current().then(function (sub) {
+        if (!sub) return;
+        var j = sub.toJSON();
+        return db.savePush({ endpoint: j.endpoint, keys: j.keys }, who.value).then(function () { show(sub); toast("Erinnerung gilt jetzt für " + who.value + "."); });
+      }).catch(fail);
+    });
+    tst.addEventListener("click", function () {
+      if (!reg) return;
+      reg.showNotification("Haushalt F & C", { body: "So sieht die Erinnerung aus. Alles klar!", icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "test" }).catch(fail);
+    });
+  }
   /* Hinweisleiste: offline bzw. Änderungen warten auf Verbindung */
   function setupNetBar(store) {
     var bar = h("div", { id: "netbar", class: "netbar", role: "status", "aria-live": "polite", hidden: true });
@@ -3658,6 +3717,7 @@
   function startData(store) {
     db = store;
     setupNetBar(store);
+    setupPush();
     listen("tasks", function (a) { tasks = a; render(); });
     listen("log", function (a) { logs = a; renderStats(); });
     listen("stores", function (a) { stores = a; renderShop(); });

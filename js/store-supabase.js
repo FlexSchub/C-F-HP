@@ -217,6 +217,13 @@
           }
         };
       },
+      savePush: function (sub, who) {
+        return sb.from("push_subs").upsert({ endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, who: who }, { onConflict: "endpoint" })
+          .then(function (r) { if (r.error) throw mapError(r.error); });
+      },
+      removePush: function (endpoint) {
+        return sb.from("push_subs").delete().eq("endpoint", endpoint).then(function (r) { if (r.error) throw mapError(r.error); });
+      },
       pending: function () { return queue.length; },
       onPending: function (f) { qlisteners.push(f); },
       flush: flushQ,

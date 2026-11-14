@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=70">
+<link rel="stylesheet" href="css/app.css?v=71">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -534,8 +534,16 @@
       </div>
       <h3 class="subh">Farben für F und C</h3>
       <div id="colorbox" class="colorbox"></div>
+      <h3 class="subh">Erinnerung um 8:00 Uhr</h3>
+      <p class="meta" id="pushinfo"></p>
+      <div class="row" id="pushrow" hidden>
+        <label for="pushwho">Für</label>
+        <select id="pushwho"><option value="F">F</option><option value="C">C</option></select>
+        <button class="linkbtn" type="button" id="pushtoggle">Einschalten</button>
+        <button class="linkbtn" type="button" id="pushtest" hidden>Testnachricht</button>
+      </div>
       <div id="setstatus" class="meta" role="status"></div>
-      <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste.</p>
+      <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste (außer der Erinnerung um 8:00 Uhr, falls ihr sie einschaltet: Sie läuft verschlüsselt über den Push-Dienst eures Handys).</p>
     </div>
   </details>
 </main>
@@ -544,7 +552,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=70"></script>
-<script src="js/app.js?v=70"></script>
+<script src="js/store-supabase.js?v=71"></script>
+<script src="js/app.js?v=71"></script>
 </body>
 </html>
