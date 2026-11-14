@@ -729,6 +729,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 73, t: ["Kalender: Termine lassen sich kopieren. Termin öffnen → „Kopieren“, dann Datum, Zeit oder Ort ändern und speichern. Bei Serien entsteht ein einzelner Termin."] },
     { v: 72, t: ["Neue Navigationsleiste unten mit Symbolen statt Menü-Knopf.", "Die Erinnerung um 8:00 Uhr ist jetzt ein kleines, eingeklapptes Feld unter „Einstellungen und Daten“."] },
     { v: 71, t: ["Neu: Tägliche Erinnerung um 8:00 Uhr mit den fälligen Aufgaben. Einschalten unter „Einstellungen und Daten“ → „Erinnerung um 8:00 Uhr“. Einmalige Einrichtung in Supabase nötig (siehe Anleitung Erinnerung)."] },
     { v: 70, t: ["Einkauf offline: Artikel hinzufügen, abhaken und löschen klappt auch ohne Netz. Die Änderungen werden gemerkt und automatisch gesendet, sobald wieder Verbindung da ist.", "Oben erscheint ein Hinweis, solange du offline bist oder Änderungen warten."] },
@@ -2563,7 +2564,7 @@
   function openEv(e, ds) {
     var occ = e && e.occDate ? e.occDate : "";
     if (e && e.master) e = e.master;
-    evDraft = { id: e ? e.id : null, occ: occ, rep: !!(e && isRepeating(e)) }; confirmEvDel = false;
+    evDraft = { id: e ? e.id : null, occ: occ, rep: !!(e && isRepeating(e)), src: e || null }; confirmEvDel = false;
     var def = ds || dnToStr(calSel || dn(todayStr()));
     $("evtitle").value = e ? (e.title || "") : "";
     $("evwho").value = e ? evWho(e) : (me === "F" || me === "C" ? me : "B");
@@ -2582,6 +2583,7 @@
       $("evevery").value = String(en); $("evunit").value = e.repUnit;
     } else { $("evrep").value = ""; $("evevery").value = "2"; $("evunit").value = "w"; }
     $("evuntil").value = reps && e.repUntil ? String(e.repUntil) : "";
+    $("evcopy").hidden = !e;
     $("evdel").hidden = !e; $("evdel").textContent = reps ? "Ganze Serie löschen" : "Termin löschen"; $("evdel").className = "linkbtn";
     $("evskip").hidden = !(reps && occ); $("evskip").textContent = "Nur den " + (occ ? fmt(occ) : "") + " überspringen";
     syncEvRep();
@@ -2590,6 +2592,30 @@
     try { window.scrollTo(0, 0); } catch (x) {}
     $("evtitle").focus();
   }
+  /* Termin kopieren: Formular mit den Daten des Termins als NEUER Termin öffnen (als Einzeltermin) */
+  function copyEv() {
+    var d = evDraft, e = d && d.src;
+    if (!e) return;
+    var date = d.occ || String(e.date), span = e.endDate ? dn(String(e.endDate)) - dn(String(e.date)) : 0;
+    openEv(null, date);
+    $("evtitle").value = e.title || "";
+    $("evwho").value = evWho(e);
+    $("evend").value = span > 0 ? dnToStr(dn(date) + span) : "";
+    $("evall").checked = isAllDay(e);
+    $("evstart").value = e.start || "";
+    $("evfinish").value = e.end || "";
+    $("evplace").value = e.place || "";
+    $("evnote").value = e.note || "";
+    $("evformtitle").textContent = "Termin kopieren";
+    evDraft.copySpan = span;
+    syncEvAll();
+    toast("Kopie: Ändere Datum, Zeit oder Ort und tippe auf Speichern.");
+    $("evdate").focus();
+  }
+  $("evcopy").addEventListener("click", copyEv);
+  $("evdate").addEventListener("change", function () {
+    if (evDraft && evDraft.copySpan > 0 && $("evdate").value) $("evend").value = dnToStr(dn($("evdate").value) + evDraft.copySpan);
+  });
   function closeEv() { evDraft = null; confirmEvDel = false; $("evform").hidden = true; $("calmain").hidden = false; renderCal(); }
   function syncEvRep() {
     var v = $("evrep").value;
