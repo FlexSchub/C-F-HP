@@ -729,11 +729,15 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 69, t: ["Die App ist jetzt installierbar: In Chrome ⋮ → „App installieren“ wählen. Dann hat sie ein eigenes Icon und öffnet im Vollbild.", "Ohne Internet zeigt sie die zuletzt geladenen Daten an."] },
     { v: 68, t: ["Neu: Nach jedem Update zeigt ein Fenster, was sich geändert hat."] },
     { v: 67, t: ["Fehler behoben: Im Kochbuch stand beim Aufklappen eines Gerichts „null“."] },
     { v: 66, t: ["Kochbuch: Zu jedem Gericht kannst du jetzt ein Rezept speichern.", "Das Rezept bleibt versteckt, bis du „Rezept anzeigen“ drückst."] },
     { v: 65, t: ["Die App startet immer auf der Startseite.", "Einkauf: Wenn alles bei einem Laden abgehakt ist, fragt ein Fenster, ob du die Kosten ins Budget einträgst."] }
   ];
+  if ("serviceWorker" in navigator && /^https:$|^http:$/.test(location.protocol) && location.hostname !== "") {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
   function showChangelog() {
     var cur = CHANGELOG[0].v, seen = parseInt(lsGet("pp-seenver"), 10);
     if (seen === cur || document.getElementById("newsbox")) return;
