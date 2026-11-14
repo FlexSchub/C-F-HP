@@ -63,9 +63,11 @@
         var m = new Map();
         rows.forEach(function (r) { m.set(r.id, r.data || {}); });
         cache[coll] = m; loaded[coll] = true; loading[coll] = null;
+        reapplyQ(coll);
         emit(coll);
       }).catch(function (e) {
         loading[coll] = null;
+        if (loaded[coll] && isNet(e)) return;   // offline: vorhandene Daten behalten, keine Fehlermeldung
         listeners[coll].slice().forEach(function (l) { if (l.err) l.err(e); });
       });
       return loading[coll];
@@ -80,6 +82,7 @@
           if (!row || !cache[row.coll]) return;
           if (p.eventType === "DELETE") cache[row.coll].delete(row.id);
           else cache[row.coll].set(row.id, row.data || {});
+          reapplyQ(row.coll);
           emit(row.coll);
         })
         .subscribe(function (status) {
@@ -99,20 +102,77 @@
     }
     function applyDelete(coll, id) { cache[coll].delete(id); emit(coll); }
 
+    /* Offline-Warteschlange (nur Einkauf): Ohne Netz werden Änderungen lokal angezeigt,
+       auf dem Gerät gemerkt und bei Verbindung der Reihe nach gesendet. */
+    var QCOLL = "shop", QKEY = "pp-queue", queue = [], flushing = false, qlisteners = [];
+    try { queue = JSON.parse(localStorage.getItem(QKEY) || "[]"); if (!Array.isArray(queue)) queue = []; } catch (e) { queue = []; }
+    function saveQ() { try { localStorage.setItem(QKEY, JSON.stringify(queue)); } catch (e) {} qlisteners.forEach(function (f) { try { f(queue.length); } catch (e) {} }); }
+    function isNet(err) {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+      var m = String((err && (err.message || err.details)) || err || "");
+      return !!(err && (err.netfail || /failed to fetch|networkerror|load failed|network request failed|timeout|abort/i.test(m)));
+    }
+    function execOp(op) {
+      var q;
+      if (op.k === "set") q = sb.from("docs").upsert({ coll: op.coll, id: op.id, data: op.data }, { onConflict: "coll,id" });
+      else if (op.k === "update") q = sb.rpc("update_doc", { p_coll: op.coll, p_id: op.id, p_patch: op.data });
+      else q = sb.from("docs").delete().eq("coll", op.coll).eq("id", op.id);
+      return Promise.resolve(q).then(function (r) { return r || {}; }, function (e) { return { error: { message: String(e && e.message || e), netfail: true } }; });
+    }
+    function applyOp(op, quiet) {
+      if (op.k === "set") cache[op.coll].set(op.id, clean(op.data));
+      else if (op.k === "update") cache[op.coll].set(op.id, Object.assign({}, cache[op.coll].get(op.id) || {}, clean(op.data)));
+      else cache[op.coll].delete(op.id);
+      if (!quiet) emit(op.coll);
+    }
+    function reapplyQ(coll) { queue.forEach(function (op) { if (op.coll === coll) applyOp(op, true); }); }
+    function flushQ() {
+      if (flushing || !queue.length || navigator.onLine === false) return Promise.resolve();
+      flushing = true;
+      var done = 0;
+      function next() {
+        if (!queue.length) return Promise.resolve();
+        return execOp(queue[0]).then(function (r) {
+          if (r.error && isNet(r.error)) return;               // weiter warten
+          queue.shift(); done++; saveQ();                     // gesendet (oder abgelehnt und verworfen)
+          return next();
+        });
+      }
+      return next().then(function () {
+        flushing = false;
+        if (done && listeners[QCOLL].length) return load(QCOLL);
+      });
+    }
+    window.addEventListener("online", function () { flushQ(); });
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) flushQ(); });
+    function writeQ(op) {
+      var data = op.data === undefined ? undefined : clean(op.data);
+      op = { k: op.k, coll: op.coll, id: op.id, data: data };
+      function park() { queue.push(op); saveQ(); applyOp(op); setTimeout(flushQ, 3000); }
+      if (queue.length || flushing || navigator.onLine === false) { park(); flushQ(); return Promise.resolve(); }
+      return execOp(op).then(function (r) {
+        if (r.error) { if (isNet(r.error)) { park(); return; } throw mapError(r.error); }
+        applyOp(op);
+      });
+    }
+
     function docRef(coll, id) {
       if (collections.indexOf(coll) < 0) throw new Error("Unbekannte Sammlung");
       return {
         id: id,
         coll: coll,
         set: function (data) {
+          if (coll === QCOLL) return writeQ({ k: "set", coll: coll, id: id, data: data });
           return sb.from("docs").upsert({ coll: coll, id: id, data: clean(data) }, { onConflict: "coll,id" })
             .then(function (r) { if (r.error) throw mapError(r.error); applySet(coll, id, data); });
         },
         update: function (patch) {
+          if (coll === QCOLL) return writeQ({ k: "update", coll: coll, id: id, data: patch });
           return sb.rpc("update_doc", { p_coll: coll, p_id: id, p_patch: clean(patch) })
             .then(function (r) { if (r.error) throw mapError(r.error); applyPatch(coll, id, patch); });
         },
         delete: function () {
+          if (coll === QCOLL) return writeQ({ k: "delete", coll: coll, id: id });
           return sb.from("docs").delete().eq("coll", coll).eq("id", id)
             .then(function (r) { if (r.error) throw mapError(r.error); applyDelete(coll, id); });
         }
@@ -157,7 +217,10 @@
           }
         };
       },
-      start: startRealtime,
+      pending: function () { return queue.length; },
+      onPending: function (f) { qlisteners.push(f); },
+      flush: flushQ,
+      start: function () { startRealtime(); flushQ(); },
       stop: function () { if (channel) { sb.removeChannel(channel); channel = null; } }
     };
     return db;

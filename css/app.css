@@ -832,3 +832,7 @@ li.task .tog { min-height: 30px; }
 .newsver { margin: 10px 0 2px; font-weight: 700; color: var(--muted); font-size: 0.85rem; }
 .newslist { margin: 0 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .modal { max-height: 80vh; overflow-y: auto; }
+.netbar { position: fixed; left: 0; right: 0; top: 0; z-index: 60; padding: 6px 12px; text-align: center; font-size: 0.85rem; font-weight: 600; background: var(--accent); color: #fff; }
+.netbar.off { background: #8a5a00; }
+.netbar[hidden] { display: none; }
+body.hasnetbar { padding-top: 34px; }

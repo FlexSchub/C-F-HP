@@ -729,6 +729,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 70, t: ["Einkauf offline: Artikel hinzufügen, abhaken und löschen klappt auch ohne Netz. Die Änderungen werden gemerkt und automatisch gesendet, sobald wieder Verbindung da ist.", "Oben erscheint ein Hinweis, solange du offline bist oder Änderungen warten."] },
     { v: 69, t: ["Die App ist jetzt installierbar: In Chrome ⋮ → „App installieren“ wählen. Dann hat sie ein eigenes Icon und öffnet im Vollbild.", "Ohne Internet zeigt sie die zuletzt geladenen Daten an."] },
     { v: 68, t: ["Neu: Nach jedem Update zeigt ein Fenster, was sich geändert hat."] },
     { v: 67, t: ["Fehler behoben: Im Kochbuch stand beim Aufklappen eines Gerichts „null“."] },
@@ -3634,8 +3635,29 @@
       if (section === "home") renderHome();
     }, function (e) { readFail(e); apply([]); });
   }
+  /* Hinweisleiste: offline bzw. Änderungen warten auf Verbindung */
+  function setupNetBar(store) {
+    var bar = h("div", { id: "netbar", class: "netbar", role: "status", "aria-live": "polite", hidden: true });
+    document.body.append(bar);
+    var wasPending = 0;
+    function upd() {
+      var n = store.pending ? store.pending() : 0, off = navigator.onLine === false;
+      if (off) bar.textContent = "Offline – nur der Einkauf wird zwischengespeichert" + (n ? " (" + n + " Änderung" + (n === 1 ? "" : "en") + " wartet)" : "") + ".";
+      else if (n) bar.textContent = n + (n === 1 ? " Änderung wartet" : " Änderungen warten") + " auf Verbindung …";
+      bar.hidden = !(off || n);
+      bar.classList.toggle("off", off);
+      document.body.classList.toggle("hasnetbar", !!(off || n));
+      if (wasPending && !n && !off) toast("Einkauf wieder synchron ✓");
+      wasPending = n;
+    }
+    store.onPending(upd);
+    window.addEventListener("online", upd);
+    window.addEventListener("offline", upd);
+    upd();
+  }
   function startData(store) {
     db = store;
+    setupNetBar(store);
     listen("tasks", function (a) { tasks = a; render(); });
     listen("log", function (a) { logs = a; renderStats(); });
     listen("stores", function (a) { stores = a; renderShop(); });
