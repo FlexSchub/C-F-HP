@@ -633,9 +633,6 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .menubtn.open .burger i:nth-child(1) { transform: translateY(6px) rotate(45deg); }
 .menubtn.open .burger i:nth-child(2) { opacity: 0; }
 .menubtn.open .burger i:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
-.top .tabs { position: absolute; z-index: 20; top: calc(100% - 6px); right: 0; left: auto; flex-direction: column; flex-wrap: nowrap; gap: 4px; min-width: 14rem; padding: 8px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.18); }
-.top .tab { border: 0; border-radius: 10px; text-align: left; padding: 10px 14px; min-height: 44px; font-size: 1rem; color: var(--ink); }
-.top .tab[aria-current="page"] { background: var(--ink); color: var(--bg); }
 
 .slabel2 { margin: 6px 0 2px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
 .favrow { margin-bottom: 4px; }
@@ -836,3 +833,20 @@ li.task .tog { min-height: 30px; }
 .netbar.off { background: #8a5a00; }
 .netbar[hidden] { display: none; }
 body.hasnetbar { padding-top: 34px; }
+
+/* Untere Navigationsleiste */
+:root { --navh: 62px; }
+.app { padding-bottom: calc(var(--navh) + 14px); }
+.top .tabs { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: nowrap; gap: 0; padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: 0 -4px 18px rgba(0,0,0,0.08); min-width: 0; }
+.top .tab { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 0; background: transparent; color: var(--muted); border-radius: 12px; padding: 4px 0; min-height: 48px; font-size: 0.62rem; font-weight: 600; text-align: center; }
+.top .tab .ico { display: flex; align-items: center; justify-content: center; width: 40px; height: 26px; border-radius: 999px; transition: background .15s; }
+.top .tab svg { width: 22px; height: 22px; }
+.top .tab .lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top .tab[aria-current="page"] { background: transparent; color: var(--ink); }
+.top .tab[aria-current="page"] .ico { background: var(--accent); color: #fff; }
+.toast { bottom: calc(var(--navh) + env(safe-area-inset-bottom, 0px)); z-index: 45; }
+.pickbar { bottom: calc(var(--navh) + 12px + env(safe-area-inset-bottom, 0px)); }
+.subdet { margin: 8px 0 0; }
+.subdet > summary { font-size: 0.85rem; color: var(--muted); cursor: pointer; padding: 6px 0; min-height: 32px; }
+.subdet .meta { font-size: 0.8rem; margin: 4px 0 8px; }
+.subdet .row { font-size: 0.85rem; }

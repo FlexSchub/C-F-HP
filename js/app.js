@@ -729,6 +729,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 72, t: ["Neue Navigationsleiste unten mit Symbolen statt Menü-Knopf.", "Die Erinnerung um 8:00 Uhr ist jetzt ein kleines, eingeklapptes Feld unter „Einstellungen und Daten“."] },
     { v: 71, t: ["Neu: Tägliche Erinnerung um 8:00 Uhr mit den fälligen Aufgaben. Einschalten unter „Einstellungen und Daten“ → „Erinnerung um 8:00 Uhr“. Einmalige Einrichtung in Supabase nötig (siehe Anleitung Erinnerung)."] },
     { v: 70, t: ["Einkauf offline: Artikel hinzufügen, abhaken und löschen klappt auch ohne Netz. Die Änderungen werden gemerkt und automatisch gesendet, sobald wieder Verbindung da ist.", "Oben erscheint ein Hinweis, solange du offline bist oder Änderungen warten."] },
     { v: 69, t: ["Die App ist jetzt installierbar: In Chrome ⋮ → „App installieren“ wählen. Dann hat sie ein eigenes Icon und öffnet im Vollbild.", "Ohne Internet zeigt sie die zuletzt geladenen Daten an."] },
@@ -3021,22 +3022,11 @@
       if (section === p[0] || (p[0] === "meal" && section === "cook")) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
     var curTab = $(section === "cook" ? "tabmeal" : "tab" + section);
-    if (curTab && $("h1name")) $("h1name").textContent = curTab.textContent;
+    if (curTab && $("h1name")) $("h1name").textContent = curTab.getAttribute("data-title") || curTab.textContent;
     setMenu(false);
     if (section === "home") { try { renderHome(); } catch (e) {} }
   }
-  /* Menü (Burger) auf- und zuklappen */
-  function setMenu(open) {
-    var nav = $("mainnav"), btn = $("menubtn");
-    if (!nav || !btn) return;
-    nav.hidden = !open;
-    btn.setAttribute("aria-expanded", String(open));
-    btn.setAttribute("aria-label", open ? "Menü schließen" : "Menü öffnen");
-    btn.classList.toggle("open", open);
-  }
-  $("menubtn").addEventListener("click", function (e) { e.stopPropagation(); setMenu($("mainnav").hidden); });
-  document.addEventListener("click", function (e) { var nav = $("mainnav"); if (nav && !nav.hidden && !nav.contains(e.target) && !$("menubtn").contains(e.target)) setMenu(false); });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("mainnav").hidden) { setMenu(false); $("menubtn").focus(); } });
+  function setMenu() {}   // Navigation ist jetzt dauerhaft unten
 
   /* Start */
   ROOMS.forEach(function (r) { $("newroom").append(h("option", { value: r }, r)); });

@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=71">
+<link rel="stylesheet" href="css/app.css?v=72">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -59,18 +59,15 @@
         <h1><span id="h1name">Heute</span> <span class="amp">F &amp; C</span></h1>
         <span class="date" id="today"></span>
       </div>
-      <button class="menubtn" type="button" id="menubtn" aria-expanded="false" aria-controls="mainnav" aria-label="Menü öffnen">
-        <span class="burger" aria-hidden="true"><i></i><i></i><i></i></span>
-      </button>
     </div>
-    <nav class="tabs" id="mainnav" aria-label="Bereiche" hidden>
-      <button class="tab" type="button" id="tabhome">Heute</button>
-      <button class="tab" type="button" id="tabputz">Putzplan</button>
-      <button class="tab" type="button" id="tabshop">Einkauf</button>
-      <button class="tab" type="button" id="tabmeal">Essen</button>
-      <button class="tab" type="button" id="tabcal">Kalender</button>
-      <button class="tab" type="button" id="tabspend">Ausgaben</button>
-      <button class="tab" type="button" id="tabbus">Bus-Rennen</button>
+    <nav class="tabs" id="mainnav" aria-label="Bereiche">
+      <button class="tab" type="button" id="tabhome" data-title="Heute" aria-label="Heute"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg></span><span class="lbl">Heute</span></button>
+      <button class="tab" type="button" id="tabputz" data-title="Putzplan" aria-label="Putzplan"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9 9l2 2 4-4M9 16h6"/></svg></span><span class="lbl">Putzplan</span></button>
+      <button class="tab" type="button" id="tabshop" data-title="Einkauf" aria-label="Einkauf"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14l-1.5 11a2 2 0 0 1-2 1.7h-7a2 2 0 0 1-2-1.7zM9 7a3 3 0 0 1 6 0"/></svg></span><span class="lbl">Einkauf</span></button>
+      <button class="tab" type="button" id="tabmeal" data-title="Essen" aria-label="Essen"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v7a2 2 0 0 0 2 2v7M7 4v5M11 4v5a2 2 0 0 1-2 2M17 4c-2 1-3 3-3 6s1 4 3 4v6"/></svg></span><span class="lbl">Essen</span></button>
+      <button class="tab" type="button" id="tabcal" data-title="Kalender" aria-label="Kalender"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></span><span class="lbl">Kalender</span></button>
+      <button class="tab" type="button" id="tabspend" data-title="Ausgaben" aria-label="Ausgaben"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M14.5 9.5c-.6-.8-1.5-1.2-2.5-1.2-1.4 0-2.5.8-2.5 1.9 0 2.6 5 1.2 5 3.8 0 1.1-1.1 1.9-2.5 1.9-1.1 0-2-.4-2.6-1.2M12 6.5v1.8M12 15.7v1.8"/></svg></span><span class="lbl">Ausgaben</span></button>
+      <button class="tab" type="button" id="tabbus" data-title="Bus-Rennen" aria-label="Bus-Rennen"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="13" rx="3"/><path d="M4 11h16M8 20v-3m8 3v-3"/><circle cx="8" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/></svg></span><span class="lbl">Bus</span></button>
     </nav>
   </header>
 
@@ -534,7 +531,7 @@
       </div>
       <h3 class="subh">Farben für F und C</h3>
       <div id="colorbox" class="colorbox"></div>
-      <h3 class="subh">Erinnerung um 8:00 Uhr</h3>
+      <details class="subdet" id="pushbox"><summary>Erinnerung um 8:00 Uhr</summary>
       <p class="meta" id="pushinfo"></p>
       <div class="row" id="pushrow" hidden>
         <label for="pushwho">Für</label>
@@ -542,6 +539,7 @@
         <button class="linkbtn" type="button" id="pushtoggle">Einschalten</button>
         <button class="linkbtn" type="button" id="pushtest" hidden>Testnachricht</button>
       </div>
+      </details>
       <div id="setstatus" class="meta" role="status"></div>
       <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste (außer der Erinnerung um 8:00 Uhr, falls ihr sie einschaltet: Sie läuft verschlüsselt über den Push-Dienst eures Handys).</p>
     </div>
@@ -552,7 +550,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=71"></script>
-<script src="js/app.js?v=71"></script>
+<script src="js/store-supabase.js?v=72"></script>
+<script src="js/app.js?v=72"></script>
 </body>
 </html>
