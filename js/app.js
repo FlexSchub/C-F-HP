@@ -729,6 +729,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 74, t: ["Neue Navigationsleiste mit 5 großen Feldern: Heute, Putzplan, Kalender, Essen und „Mehr“.", "Unter „Mehr“ findest du Einkauf, Ausgaben, Bus-Rennen und die neue Seite „Einstellungen“ (mit Konto, Farben, Daten, Erinnerung und Version)."] },
     { v: 73, t: ["Kalender: Termine lassen sich kopieren. Termin öffnen → „Kopieren“, dann Datum, Zeit oder Ort ändern und speichern. Bei Serien entsteht ein einzelner Termin."] },
     { v: 72, t: ["Neue Navigationsleiste unten mit Symbolen statt Menü-Knopf.", "Die Erinnerung um 8:00 Uhr ist jetzt ein kleines, eingeklapptes Feld unter „Einstellungen und Daten“."] },
     { v: 71, t: ["Neu: Tägliche Erinnerung um 8:00 Uhr mit den fälligen Aufgaben. Einschalten unter „Einstellungen und Daten“ → „Erinnerung um 8:00 Uhr“. Einmalige Einrichtung in Supabase nötig (siehe Anleitung Erinnerung)."] },
@@ -742,10 +743,10 @@
   if ("serviceWorker" in navigator && /^https:$|^http:$/.test(location.protocol) && location.hostname !== "") {
     window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
   }
-  function showChangelog() {
+  function showChangelog(force) {
     var cur = CHANGELOG[0].v, seen = parseInt(lsGet("pp-seenver"), 10);
-    if (seen === cur || document.getElementById("newsbox")) return;
-    var list = CHANGELOG.filter(function (c) { return isNaN(seen) ? c.v === cur : c.v > seen; });
+    if ((seen === cur && !force) || document.getElementById("newsbox")) return;
+    var list = force ? CHANGELOG.slice(0, 5) : CHANGELOG.filter(function (c) { return isNaN(seen) ? c.v === cur : c.v > seen; });
     if (!list.length) { lsSet("pp-seenver", String(cur)); return; }
     var close = function () { lsSet("pp-seenver", String(cur)); var m = document.getElementById("newsbox"); if (m) m.remove(); document.removeEventListener("keydown", onKey); };
     var onKey = function (e) { if (e.key === "Escape") close(); };
@@ -3043,16 +3044,32 @@
     $("calview").hidden = section !== "cal";
     $("busview").hidden = section !== "bus";
     $("homeview").hidden = section !== "home";
-    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"], ["bus", "tabbus"]].forEach(function (p) {
+    $("setview").hidden = section !== "set";
+    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"], ["bus", "tabbus"], ["set", "tabset"]].forEach(function (p) {
       var b = $(p[1]);
       if (section === p[0] || (p[0] === "meal" && section === "cook")) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
+    var inMore = ["shop", "spend", "bus", "set"].indexOf(section) >= 0;
+    if (inMore) $("tabmore").setAttribute("aria-current", "page"); else $("tabmore").removeAttribute("aria-current");
     var curTab = $(section === "cook" ? "tabmeal" : "tab" + section);
     if (curTab && $("h1name")) $("h1name").textContent = curTab.getAttribute("data-title") || curTab.textContent;
     setMenu(false);
     if (section === "home") { try { renderHome(); } catch (e) {} }
   }
-  function setMenu() {}   // Navigation ist jetzt dauerhaft unten
+  /* „Mehr“: Fenster mit den weiteren Bereichen */
+  function setMenu(open) {
+    var w = $("morewrap"), b = $("tabmore");
+    if (!w || !b) return;
+    w.hidden = !open;
+    b.setAttribute("aria-expanded", String(!!open));
+    if (open) { var f = w.querySelector("[aria-current=page]") || w.querySelector(".cell"); if (f) f.focus(); }
+  }
+  $("tabmore").addEventListener("click", function () { setMenu($("morewrap").hidden); });
+  $("morescrim").addEventListener("click", function () { setMenu(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("morewrap").hidden) { setMenu(false); $("tabmore").focus(); } });
+  $("tabset").addEventListener("click", function () { goSection("set"); });
+  $("appver").textContent = String(CHANGELOG[0].v);
+  $("shownews").addEventListener("click", function () { showChangelog(true); });
 
   /* Start */
   ROOMS.forEach(function (r) { $("newroom").append(h("option", { value: r }, r)); });

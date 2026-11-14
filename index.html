@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=73">
+<link rel="stylesheet" href="css/app.css?v=74">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -63,11 +63,9 @@
     <nav class="tabs" id="mainnav" aria-label="Bereiche">
       <button class="tab" type="button" id="tabhome" data-title="Heute" aria-label="Heute"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg></span><span class="lbl">Heute</span></button>
       <button class="tab" type="button" id="tabputz" data-title="Putzplan" aria-label="Putzplan"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9 9l2 2 4-4M9 16h6"/></svg></span><span class="lbl">Putzplan</span></button>
-      <button class="tab" type="button" id="tabshop" data-title="Einkauf" aria-label="Einkauf"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14l-1.5 11a2 2 0 0 1-2 1.7h-7a2 2 0 0 1-2-1.7zM9 7a3 3 0 0 1 6 0"/></svg></span><span class="lbl">Einkauf</span></button>
-      <button class="tab" type="button" id="tabmeal" data-title="Essen" aria-label="Essen"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v7a2 2 0 0 0 2 2v7M7 4v5M11 4v5a2 2 0 0 1-2 2M17 4c-2 1-3 3-3 6s1 4 3 4v6"/></svg></span><span class="lbl">Essen</span></button>
       <button class="tab" type="button" id="tabcal" data-title="Kalender" aria-label="Kalender"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></span><span class="lbl">Kalender</span></button>
-      <button class="tab" type="button" id="tabspend" data-title="Ausgaben" aria-label="Ausgaben"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M14.5 9.5c-.6-.8-1.5-1.2-2.5-1.2-1.4 0-2.5.8-2.5 1.9 0 2.6 5 1.2 5 3.8 0 1.1-1.1 1.9-2.5 1.9-1.1 0-2-.4-2.6-1.2M12 6.5v1.8M12 15.7v1.8"/></svg></span><span class="lbl">Ausgaben</span></button>
-      <button class="tab" type="button" id="tabbus" data-title="Bus-Rennen" aria-label="Bus-Rennen"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="13" rx="3"/><path d="M4 11h16M8 20v-3m8 3v-3"/><circle cx="8" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/></svg></span><span class="lbl">Bus</span></button>
+      <button class="tab" type="button" id="tabmeal" data-title="Essen" aria-label="Essen"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v7a2 2 0 0 0 2 2v7M7 4v5M11 4v5a2 2 0 0 1-2 2M17 4c-2 1-3 3-3 6s1 4 3 4v6"/></svg></span><span class="lbl">Essen</span></button>
+      <button class="tab" type="button" id="tabmore" aria-label="Weitere Bereiche" aria-expanded="false" aria-controls="moresheet"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></svg></span><span class="lbl">Mehr</span></button>
     </nav>
   </header>
 
@@ -516,22 +514,30 @@
     <div class="col" id="spendcats"></div>
     <div class="col" id="spendlist"></div>
   </section>
-  <details class="add" id="settingsbox">
-    <summary>Einstellungen und Daten</summary>
-    <div class="setbody">
+<section class="col setview" id="setview" hidden>
+    <div class="setcard">
+      <h2>Konto</h2>
       <p class="meta">Angemeldet als <b id="whoami"></b></p>
+      <div class="row"><button class="linkbtn" type="button" id="dologout">Abmelden</button></div>
+    </div>
+    <div class="setcard">
+      <h2>Aussehen</h2>
+      <p class="meta">Farben für F und C</p>
+      <div id="colorbox" class="colorbox"></div>
+    </div>
+    <div class="setcard">
+      <h2>Daten</h2>
       <div class="row">
         <button class="linkbtn" type="button" id="doexport">Daten exportieren</button>
         <button class="linkbtn" type="button" id="doimport">Daten importieren</button>
         <input type="file" id="importfile" accept="application/json,.json" hidden>
       </div>
       <div id="importconfirm" class="banner" hidden></div>
-      <div class="row">
-        <button class="linkbtn" type="button" id="doexample">Beispieldaten laden</button>
-        <button class="linkbtn" type="button" id="dologout">Abmelden</button>
-      </div>
-      <h3 class="subh">Farben für F und C</h3>
-      <div id="colorbox" class="colorbox"></div>
+      <div class="row"><button class="linkbtn" type="button" id="doexample">Beispieldaten laden</button></div>
+      <div id="setstatus" class="meta" role="status"></div>
+    </div>
+    <div class="setcard">
+      <h2>Erinnerung</h2>
       <details class="subdet" id="pushbox"><summary>Erinnerung um 8:00 Uhr</summary>
       <p class="meta" id="pushinfo"></p>
       <div class="row" id="pushrow" hidden>
@@ -541,17 +547,30 @@
         <button class="linkbtn" type="button" id="pushtest" hidden>Testnachricht</button>
       </div>
       </details>
-      <div id="setstatus" class="meta" role="status"></div>
+    </div>
+    <div class="setcard">
+      <h2>Über die App</h2>
+      <p class="meta">Version <b id="appver"></b></p>
+      <div class="row"><button class="linkbtn" type="button" id="shownews">Was ist neu?</button></div>
       <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste (außer der Erinnerung um 8:00 Uhr, falls ihr sie einschaltet: Sie läuft verschlüsselt über den Push-Dienst eures Handys).</p>
     </div>
-  </details>
+  </section>
+<div id="morewrap" hidden>
+  <div class="morescrim" id="morescrim"></div>
+  <div class="moresheet" id="moresheet" role="dialog" aria-label="Weitere Bereiche">
+    <button class="cell" type="button" id="tabshop" data-title="Einkauf"><span class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14l-1.5 11a2 2 0 0 1-2 1.7h-7a2 2 0 0 1-2-1.7zM9 7a3 3 0 0 1 6 0"/></svg></span>Einkauf</button>
+    <button class="cell" type="button" id="tabspend" data-title="Ausgaben"><span class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M14.5 9.5c-.6-.8-1.5-1.2-2.5-1.2-1.4 0-2.5.8-2.5 1.9 0 2.6 5 1.2 5 3.8 0 1.1-1.1 1.9-2.5 1.9-1.1 0-2-.4-2.6-1.2M12 6.5v1.8M12 15.7v1.8"/></svg></span>Ausgaben</button>
+    <button class="cell" type="button" id="tabbus" data-title="Bus-Rennen"><span class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="13" rx="3"/><path d="M4 11h16M8 20v-3m8 3v-3"/><circle cx="8" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/></svg></span>Bus-Rennen</button>
+    <button class="cell" type="button" id="tabset" data-title="Einstellungen"><span class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M19 7h1M4 17h1M11 17h9"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg></span>Einstellungen</button>
+  </div>
+</div>
 </main>
 
 <div class="toast" id="toast" hidden><div class="toast-in"><span id="toasttext"></span><button type="button" id="toastbtn" hidden></button></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=73"></script>
-<script src="js/app.js?v=73"></script>
+<script src="js/store-supabase.js?v=74"></script>
+<script src="js/app.js?v=74"></script>
 </body>
 </html>
