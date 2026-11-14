@@ -562,12 +562,7 @@ ul.bzlog li:first-child { border-top: 0; }
 .bzmini .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: .9rem; }
 .bzguest { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .bzguest input[type="text"] { flex: 1 1 10rem; }
-.bzrules { padding: 0; gap: 0; }
-.bzrules summary { cursor: pointer; padding: 14px 16px; font-family: var(--font-display); font-weight: 600; font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); list-style: none; display: flex; justify-content: space-between; align-items: center; }
-.bzrules summary::-webkit-details-marker { display: none; }
-.bzrules summary::after { content: "+"; font-size: 1.2rem; color: var(--accent); }
-.bzrules[open] summary::after { content: "–"; }
-.bzrulelist { margin: 0; padding: 0 16px 16px 2.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.92rem; color: var(--ink); }
+.bzrulelist { margin: 0; padding: 4px 8px 12px 2.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.92rem; color: var(--ink); }
 
 li.task .side { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 li.task .tog { border: 1px solid var(--line-strong); background: transparent; border-radius: 999px; min-width: 36px; min-height: 32px; padding: 0 8px; font-size: 0.95rem; line-height: 1; }
@@ -870,3 +865,54 @@ body.hasnetbar { padding-top: 34px; }
 .setcard h2 { margin: 0; font-size: 1.05rem; }
 .setcard .meta { margin: 0; }
 .setcard .foot { margin: 4px 0 0; font-size: 0.78rem; color: var(--muted); }
+
+/* Ausgaben: Budget-Karte mit Pfeilen, Statistik */
+.budcard { gap: 12px; }
+.budnav { display: flex; align-items: center; gap: 8px; }
+.budnav h2 { flex: 1; margin: 0; font-size: 1.02rem; text-align: center; min-width: 0; overflow-wrap: anywhere; }
+.navbtn { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); font-size: 1.5rem; line-height: 1; }
+.navbtn:disabled { opacity: .3; }
+.budsum { display: flex; flex-direction: column; gap: 10px; }
+.budacts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.budacts .primary { flex: 1 1 100%; min-height: 50px; font-size: 1.05rem; background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(23,105,90,.3); }
+.budacts .linkbtn { flex: 1 1 auto; }
+.spscroll { overflow-x: auto; margin: 10px -4px 0; padding: 0 4px; }
+.spstat { border-collapse: collapse; font-size: 0.82rem; min-width: 100%; font-variant-numeric: tabular-nums; }
+.spstat th, .spstat td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.spstat thead th { color: var(--muted); font-weight: 600; font-size: 0.74rem; }
+.spstat tbody th { text-align: left; font-weight: 600; position: sticky; left: 0; background: var(--surface); max-width: 7.5rem; overflow: hidden; text-overflow: ellipsis; }
+.spstat thead th:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
+.spstat .now { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.spstat .sumc { font-weight: 700; }
+.spstat tr.tot th, .spstat tr.tot td { font-weight: 700; border-top: 2px solid var(--line-strong); border-bottom: 0; }
+.bzrules .bzrulelist { font-size: 0.88rem; }
+.whead.tapall { cursor: pointer; min-height: 44px; align-items: center; }
+.whead.tapall .wtog { flex: 1; align-self: stretch; align-items: center; }
+.chlog { padding-top: 6px; }
+.chgrp { margin: 8px 0 2px; font-weight: 700; font-size: 0.9rem; }
+.setcard.fold > summary h2 { font-size: 1.05rem; }
+.setin { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+
+/* Wochenraster */
+.wgrid { --wg-gut: 38px; background: var(--surface); border-radius: 18px; padding: 8px 6px 10px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.wg-head, .wg-strip { display: grid; grid-template-columns: var(--wg-gut) repeat(7, minmax(0, 1fr)); align-items: center; }
+.wg-dh { display: flex; flex-direction: column; align-items: center; font-size: 0.7rem; color: var(--muted); gap: 2px; padding: 2px 0 6px; }
+.wg-dh b { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 0.9rem; color: var(--ink); }
+.wg-dh.today b { background: var(--accent); color: #fff; }
+.wg-gut { font-size: 0.6rem; color: var(--muted); text-align: right; padding-right: 4px; }
+.wg-strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 3px 0; }
+.wg-sc { display: flex; flex-direction: column; gap: 2px; padding: 0 1px; min-width: 0; }
+.wg-chip { border: 0; border-radius: 5px; color: #fff; font-size: 0.62rem; font-weight: 600; padding: 2px 3px; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-height: 20px; }
+.wg-chip.F, .wg-ev.F { background: var(--f); } .wg-chip.C, .wg-ev.C { background: var(--c); } .wg-chip.B, .wg-ev.B { background: var(--accent); }
+.wg-body { position: relative; margin-top: 2px; }
+.wg-hl { position: absolute; left: var(--wg-gut); right: 0; border-top: 1px solid var(--line); }
+.wg-ht { position: absolute; left: 0; width: calc(var(--wg-gut) - 5px); text-align: right; font-size: 0.62rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wg-col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+.wg-col.today { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.wg-ev { position: absolute; border: 0; border-radius: 6px; color: #fff; padding: 2px 3px; text-align: left; overflow: hidden; font: inherit; font-size: 0.64rem; line-height: 1.15; display: flex; flex-direction: column; gap: 1px; box-sizing: border-box; }
+.wg-ev b { font-weight: 700; overflow-wrap: break-word; hyphens: auto; -webkit-hyphens: auto; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.wg-ev span { opacity: .85; font-size: 0.58rem; }
+.wg-now { position: absolute; left: -1px; right: 0; height: 2px; background: #e0642f; pointer-events: none; z-index: 2; }
+.wg-hint { margin: 8px 4px 0; font-size: 0.72rem; }
+.soon .td { margin-right: 6px; }
+.soon li { padding-right: 10px; }

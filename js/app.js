@@ -28,7 +28,7 @@
   var section = "home";   // beim Öffnen immer die Startseite
   var events = [], eventsLoaded = false;
   var calOpen = {};
-  var calMode = lsGet("pp-calmode") === "week" ? "week" : "month";
+  var calMode = ({ week: "week", list: "list" })[lsGet("pp-calmode")] || "month";
   var calAnchor = 0, calSel = 0;      // Tage seit 1970 (werden unten gesetzt)
   var evDraft = null, confirmEvDel = false;
   var budgets = null;        // null = lädt noch
@@ -729,6 +729,9 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 77, t: ["Startseite: „überfällig“ und „heute“ kleben nicht mehr am rechten Rand."] },
+    { v: 76, t: ["Kalender: „Woche“ ist jetzt ein Wochenraster mit Zeitstrahl links und Terminen als farbige Blöcke (F blau, C magenta, gemeinsam grün). Ganztägige und mehrtägige Termine stehen oben, die aktuelle Uhrzeit ist als orange Linie markiert.", "Tipp auf einen Block öffnet den Termin, Tipp auf eine freie Stelle legt dort einen neuen an.", "Die bisherige Tagesliste gibt es weiter unter „Liste“."] },
+    { v: 75, t: ["Ausgaben: Pfeile ‹ › am Budget zum Wechseln zwischen vorherigem und nächstem Budget. Die obere Zeile ist weg, „+ Ausgabe“ ist farbig hervorgehoben.", "Ausgaben: Neue Statistik mit Kategorien oder Orten über die letzten Budget-Zeiträume.", "Kalender (Woche): Ein Tipp irgendwo auf die Kopfzeile eines vergangenen Tages klappt ihn auf oder zu.", "Bus-Rennen: „Regeln“ ist kleiner und klappt mit Pfeil auf.", "Einstellungen: Alle Karten sind klappbar.", "Über die App: Vollständiger Changelog."] },
     { v: 74, t: ["Neue Navigationsleiste mit 5 großen Feldern: Heute, Putzplan, Kalender, Essen und „Mehr“.", "Unter „Mehr“ findest du Einkauf, Ausgaben, Bus-Rennen und die neue Seite „Einstellungen“ (mit Konto, Farben, Daten, Erinnerung und Version)."] },
     { v: 73, t: ["Kalender: Termine lassen sich kopieren. Termin öffnen → „Kopieren“, dann Datum, Zeit oder Ort ändern und speichern. Bei Serien entsteht ein einzelner Termin."] },
     { v: 72, t: ["Neue Navigationsleiste unten mit Symbolen statt Menü-Knopf.", "Die Erinnerung um 8:00 Uhr ist jetzt ein kleines, eingeklapptes Feld unter „Einstellungen und Daten“."] },
@@ -742,6 +745,32 @@
   ];
   if ("serviceWorker" in navigator && /^https:$|^http:$/.test(location.protocol) && location.hostname !== "") {
     window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
+  /* Ältere Updates (1–64), nachträglich nach Bereichen zusammengefasst */
+  var HISTORY = [
+    ["Grundlage und Sicherheit", ["Start als reine Web-App, später Umzug auf Supabase (EU) mit Login für F und C, Live-Abgleich und Zugriffsregeln.", "Sicherheits-Check (Update 63): Zugriff nur für Mitglieder, strenge Inhaltsrichtlinie (CSP), nur öffentlicher Schlüssel im Browser, toter Code entfernt.", "Export und Import der Daten, Beispieldaten, frei wählbare Farben für F und C."]],
+    ["Putzplan", ["Aufgaben mit Zimmer, Wiederholung, Zuständigkeit (F, C, abwechselnd, egal) und Fälligkeit.", "Ansichten Heute, Plan und Statistik, Verlauf mit Rückgängig, schmalere Aufgabenfelder."]],
+    ["Einkauf", ["Läden mit Gängen, Schnell-Hinzufügen mit Vorschlägen, Vorrat („immer da“), Chips zum Wieder-Hinzufügen.", "Bearbeiten-Modus für einzelne Einträge und Läden, Abfrage beim Verwenden von Vorrat."]],
+    ["Kochbuch und Essensplan", ["Speisekarte mit Zeit, Aufwand und Labels (grün = muss, rot = ausschließen), Suche, Beilagen mit eigenem Label.", "Essensplan: Woche planen mit Würfel, gemerkte Filter je Wochentag und Mahlzeit, Tage klappbar mit grünem Kopf, M:/A:-Zeilen, getrennte Mahlzeiten für F und C.", "Zutaten der geplanten Woche gehen auf Wunsch direkt auf die Einkaufsliste (auch alle auf einmal abhaken)."]],
+    ["Kalender", ["Monats- und Wochenansicht, Termine mit Person, Zeit, Ort, Notiz und Wiederholung, Import und Export (.ics)."]],
+    ["Ausgaben", ["Budgets mit Zeitraum und automatischer Wiederholung, Kategorien mit Diagramm, wiederkehrende Ausgaben, klappbarer Verlauf."]],
+    ["Bus-Rennen", ["Spiel zum Bus-Zählen mit Punkten und Regeln, Auspuff-Animation beim Vorrücken, Explosion bei Flaschen-Fehlern."]]
+  ];
+  function renderChangelogFull() {
+    var box = $("chlog"); if (!box) return;
+    box.replaceChildren();
+    CHANGELOG.forEach(function (c) {
+      var ul = h("ul", { class: "newslist" });
+      c.t.forEach(function (x) { ul.append(h("li", null, x)); });
+      box.append(h("p", { class: "newsver" }, "Update " + c.v), ul);
+    });
+    box.append(h("p", { class: "newsver" }, "Frühere Updates (1–64), zusammengefasst"));
+    HISTORY.forEach(function (g) {
+      var ul = h("ul", { class: "newslist" });
+      g[1].forEach(function (x) { ul.append(h("li", null, x)); });
+      box.append(h("p", { class: "chgrp" }, g[0]), ul);
+    });
+    box.append(h("p", { class: "meta" }, "Die Beschreibung der frühen Updates ist nachträglich zusammengestellt, deshalb ohne einzelne Nummern."));
   }
   function showChangelog(force) {
     var cur = CHANGELOG[0].v, seen = parseInt(lsGet("pp-seenver"), 10);
@@ -2287,6 +2316,8 @@
       else { var lst = h("div", { class: "evlist" }); sevs.forEach(function (e) { lst.append(evRow(e)); }); panel.append(lst); }
       panel.append(h("div", { class: "row" }, h("button", { class: "primary", type: "button", onclick: function () { openEv(null, sds); } }, "+ Termin eintragen")));
       det.append(panel);
+    } else if (calMode === "week") {
+      renderWeekGrid(grid);
     } else {
       var mon = weekStart(calAnchor);
       $("callabel").textContent = "KW " + isoWeek(mon) + " · " + dayLabel(mon) + " – " + dayLabel(mon + 6);
@@ -2296,11 +2327,19 @@
           var past = n < today, folded = past && !calOpen[ds];
           var card = h("div", { class: "wday" + (n === today ? " today" : "") + (past ? " past" : "") + (folded ? " folded" : "") });
           var head = h("div", { class: "whead" });
-          if (past) head.append(h("button", { class: "wtog", type: "button", "aria-expanded": String(!folded), "aria-label": WDLONG[(n + 3) % 7] + " " + dayLabel(n) + (folded ? " aufklappen" : " zuklappen"), onclick: function () { if (calOpen[ds]) delete calOpen[ds]; else calOpen[ds] = true; renderCal(); } },
+          if (past) head.append(h("button", { class: "wtog", type: "button", "aria-expanded": String(!folded), "aria-label": WDLONG[(n + 3) % 7] + " " + dayLabel(n) + (folded ? " aufklappen" : " zuklappen") },
             h("b", null, WDLONG[(n + 3) % 7]), h("span", null, dayLabel(n)), h("span", { class: "chev", "aria-hidden": "true" }, folded ? "▸" : "▾")));
           else head.append(h("b", null, WDLONG[(n + 3) % 7]), h("span", null, dayLabel(n)));
           if (folded) head.append(h("span", { class: "wsum" }, evs.length ? evs.length + (evs.length === 1 ? " Termin" : " Termine") : "keine Termine"));
           else head.append(h("button", { class: "linkbtn", type: "button", onclick: function () { openEv(null, ds); } }, "+ Termin"));
+          if (past) {   // ganze Kopfzeile klappt auf/zu (außer „+ Termin“)
+            head.classList.add("tapall");
+            head.addEventListener("click", function (e) {
+              if (e.target.closest && e.target.closest(".linkbtn")) return;
+              if (calOpen[ds]) delete calOpen[ds]; else calOpen[ds] = true;
+              renderCal();
+            });
+          }
           card.append(head);
           if (!folded) {
             if (!evs.length) card.append(h("p", { class: "noneyet" }, "Keine Termine"));
@@ -2551,6 +2590,85 @@
       chain = chain.then(function () { return Promise.all(part.map(function (e) { return db.doc("events/" + e.id).delete(); })); });
     })(imp.slice(i, i + 20));
     chain.then(function () { icsStatus(imp.length + " importierte Termine gelöscht."); }).catch(function (e) { icsStatus("Löschen fehlgeschlagen.", true); writeFail(e); });
+  }
+
+  /* Wochenraster: 7 Spalten, Zeitstrahl links, Termine als Blöcke */
+  var WG_H = 44;   // Pixel pro Stunde
+  function tmin(t) { var m = /^(\d{1,2}):(\d\d)/.exec(String(t || "")); return m ? +m[1] * 60 + +m[2] : null; }
+  function renderWeekGrid(grid) {
+    var mon = weekStart(calAnchor), today = dn(todayStr());
+    $("callabel").textContent = "KW " + isoWeek(mon) + " · " + dayLabel(mon) + " – " + dayLabel(mon + 6);
+    var cols = [], lo = 7 * 60, hi = 21 * 60, anyAllDay = false;
+    for (var i = 0; i < 7; i++) {
+      var ds = dnToStr(mon + i), strip = [], timed = [];
+      eventsOn(ds).forEach(function (e) {
+        var multi = evEndStr(e) !== String(e.date);
+        if (isAllDay(e) || multi) { strip.push(e); anyAllDay = true; return; }
+        var a = tmin(e.start); if (a === null) { strip.push(e); anyAllDay = true; return; }
+        var b = tmin(e.end); if (b === null || b <= a) b = Math.min(a + 60, 24 * 60);
+        lo = Math.min(lo, Math.floor(a / 60) * 60); hi = Math.max(hi, Math.ceil(b / 60) * 60);
+        timed.push({ e: e, a: a, b: b });
+      });
+      /* Spuren für Überschneidungen */
+      timed.sort(function (x, y) { return x.a - y.a || x.b - y.b; });
+      var cluster = [], clusterEnd = -1;
+      function flush() { var n = cluster.reduce(function (m, t) { return Math.max(m, t.lane + 1); }, 1); cluster.forEach(function (t) { t.lanes = n; }); cluster = []; }
+      timed.forEach(function (t) {
+        if (t.a >= clusterEnd) { flush(); clusterEnd = -1; }
+        var used = {}; cluster.forEach(function (c) { if (c.b > t.a) used[c.lane] = true; });
+        var l = 0; while (used[l]) l++;
+        t.lane = l; cluster.push(t); clusterEnd = Math.max(clusterEnd, t.b);
+      });
+      flush();
+      cols.push({ n: mon + i, ds: ds, strip: strip, timed: timed });
+    }
+    var H = WG_H, box = h("div", { class: "wgrid", role: "group", "aria-label": "Wochenansicht" });
+    /* Kopfzeile */
+    var hd = h("div", { class: "wg-head" }, h("span", { class: "wg-gut" }));
+    cols.forEach(function (c) {
+      hd.append(h("div", { class: "wg-dh" + (c.n === today ? " today" : "") }, h("span", null, WD[(c.n + 3) % 7]), h("b", null, String(new Date(c.n * 864e5).getUTCDate()))));
+    });
+    box.append(hd);
+    /* ganztägige Termine */
+    if (anyAllDay) {
+      var st = h("div", { class: "wg-strip" }, h("span", { class: "wg-gut" }, "ganzt."));
+      cols.forEach(function (c) {
+        var cell = h("div", { class: "wg-sc" });
+        c.strip.forEach(function (e) { cell.append(h("button", { class: "wg-chip " + evWho(e), type: "button", onclick: function () { openEv(e, null); } }, e.title || "Termin")); });
+        st.append(cell);
+      });
+      box.append(st);
+    }
+    /* Raster */
+    var body = h("div", { class: "wg-body", style: "height:" + ((hi - lo) / 60 * H) + "px" });
+    for (var hr = lo / 60; hr < hi / 60; hr++) {
+      body.append(h("span", { class: "wg-hl", style: "top:" + ((hr * 60 - lo) / 60 * H) + "px" }), h("span", { class: "wg-ht", style: "top:" + ((hr * 60 - lo) / 60 * H - 7) + "px" }, hr + ":00"));
+    }
+    var now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+    cols.forEach(function (c, i) {
+      var col = h("div", { class: "wg-col" + (c.n === today ? " today" : ""), style: "left:calc(var(--wg-gut) + (100% - var(--wg-gut)) * " + i + " / 7);width:calc((100% - var(--wg-gut)) / 7)" });
+      col.addEventListener("click", function (ev) {
+        if (ev.target !== col) return;   // nur freie Fläche
+        var y = ev.clientY - col.getBoundingClientRect().top, m = lo + Math.floor(y / H) * 60;
+        openEv(null, c.ds);
+        $("evall").checked = false; syncEvAll();
+        var p2 = function (x) { return String(Math.floor(x / 60)).padStart(2, "0") + ":00"; };
+        $("evstart").value = p2(m); $("evfinish").value = p2(Math.min(m + 60, 23 * 60));
+      });
+      c.timed.forEach(function (t) {
+        var e = t.e, w = evWho(e), hh = Math.max(20, (t.b - t.a) / 60 * H - 2);
+        var blk = h("button", { class: "wg-ev " + w, type: "button", "aria-label": (e.title || "Termin") + ", " + evTimeText(e), onclick: function (ev) { ev.stopPropagation(); openEv(e, null); },
+          style: "top:" + ((t.a - lo) / 60 * H) + "px;height:" + hh + "px;left:calc(" + (t.lane * 100 / t.lanes) + "% + 1px);width:calc(" + (100 / t.lanes) + "% - 2px)" },
+          h("b", null, e.title || "Termin"));
+        if (hh >= 44 && e.place) blk.append(h("span", null, e.place));
+        col.append(blk);
+      });
+      if (c.n === today && nowMin >= lo && nowMin <= hi) col.append(h("span", { class: "wg-now", style: "top:" + ((nowMin - lo) / 60 * H) + "px" }));
+      body.append(col);
+    });
+    box.append(body);
+    box.append(h("p", { class: "meta wg-hint" }, "Tipp auf einen Block öffnet den Termin. Tipp auf eine freie Stelle legt dort einen neuen an."));
+    grid.append(box);
   }
 
   function calStep(dir) {
@@ -2929,7 +3047,7 @@
   var spendOpen = false;
   function renderSpend() {
     var head = $("spendhead");
-    var parts = ["budgetbar", "budgetform", "spendsum", "spendopen", "spendform", "spendlist", "spendcats"];
+    var parts = ["budgetbar", "budgetform", "spendsum", "spendopen", "spendform", "spendlist", "spendcats", "spendstat"];
     function hideAll() { parts.forEach(function (id) { $(id).hidden = true; }); }
     var ban = $("spendbanner"); ban.replaceChildren();
     if (dbMissing) {
@@ -2943,10 +3061,8 @@
     var list = sortedBudgets();
     var b = resolveBudget();
     if (b) { curBudget = b.id; }
-    var sel = $("budgetsel");
-    sel.replaceChildren();
-    list.forEach(function (x) { sel.append(h("option", { value: x.id, selected: b && x.id === b.id }, budgetLabel(x))); });
     $("budgetbar").hidden = !list.length;
+    head.hidden = false;
     $("budgetform").hidden = !budgetForm;
     $("budgettitle").textContent = budgetForm === "edit" ? "Budget bearbeiten" : (list.length ? "Neues Budget" : "Euer erstes Budget");
     $("budgetcancel").hidden = !list.length;
@@ -2958,6 +3074,7 @@
     sum.replaceChildren(); lst.replaceChildren(); cats.replaceChildren();
     if (!b) {
       head.textContent = "Noch kein Budget";
+      $("spendstat").hidden = true;
       $("spendform").hidden = true; $("spendopen").hidden = true; sum.hidden = true; lst.hidden = true; cats.hidden = true;
       return;
     }
@@ -2974,7 +3091,11 @@
     var daysLeft = today > de ? 0 : Math.min(totalDays, de - Math.max(today, ds) + 1);
     var fill = Math.min(100, spent / b.amount * 100);
 
-    head.textContent = over ? "Budget um " + eur(-left) + " überschritten" : "Noch " + eur(left) + " übrig";
+    head.hidden = true;
+    var bi = list.indexOf(b);   // Liste: neueste zuerst
+    $("budtitle").textContent = (b.name ? b.name + " · " : "") + fmt(b.start) + " – " + fmtY(b.end);
+    $("budprev").disabled = bi >= list.length - 1;
+    $("budnext").disabled = bi <= 0;
 
     var note;
     if (today < ds) note = "Der Zeitraum startet am " + fmtY(b.start) + ".";
@@ -2984,8 +3105,7 @@
 
     var wrap = h("div", { class: "pwrap" }, h("div", { class: "pbar" + (over ? " over" : ""), role: "img", "aria-label": pct(spent / b.amount * 100) + " des Budgets ausgegeben" }, h("span", { style: "width:" + fill + "%" })));
     if (today >= ds && today <= de) wrap.append(h("div", { class: "ptick", style: "left:calc(" + ((today - ds + 1) / totalDays * 100) + "% - 1px)", title: "Heute" }));
-    sum.append(h("div", { class: "panel" },
-      h("h2", null, (b.name ? b.name + " · " : "") + fmt(b.start) + " – " + fmtY(b.end)),
+    sum.append(h("div", { class: "budsum" },
       h("div", { class: "duo sumduo" },
         h("div", { class: "who K" + (over ? " over" : "") }, h("span", { class: "num" }, eur(Math.abs(left))), h("span", { class: "lbl" }, over ? "drüber" : "übrig")),
         h("div", { class: "who R" }, h("span", { class: "num" }, eur(b.amount)), h("span", { class: "lbl" }, "Budget"))),
@@ -3027,6 +3147,54 @@
       lst.append(sdet);
     }
     renderCats(cats, mine, spent);
+    renderSpendStats($("spendstat"), list, b);
+  }
+
+  /* Statistik über mehrere Budget-Zeiträume: Kategorien oder Orte je Zeitraum */
+  var statDim = lsGet("pp-spendstat") === "place" ? "place" : "cat";
+  function renderSpendStats(box, list, cur) {
+    box.replaceChildren(); box.hidden = false;
+    var periods = list.filter(function (x) { return spends.some(function (s) { return s.budget === x.id; }); });
+    if (periods.indexOf(cur) < 0 && spends.some(function (s) { return s.budget === cur.id; })) periods.push(cur);
+    periods.sort(function (a, c) { return String(a.start).localeCompare(String(c.start)); });
+    periods = periods.slice(-6);
+    if (!periods.length) { box.hidden = true; return; }
+    var colOf = {}; periods.forEach(function (x, i) { colOf[x.id] = i; });
+    var map = {}, keys = [];
+    spends.forEach(function (s) {
+      if (colOf[s.budget] === undefined) return;
+      var name = statDim === "place" ? (String(s.place || "").trim() || "Ohne Ort") : (String(s.category || "").trim() || "Sonstiges");
+      var k = name.toLowerCase();
+      if (!map[k]) { map[k] = { name: name, cells: periods.map(function () { return 0; }), sum: 0 }; keys.push(k); }
+      map[k].cells[colOf[s.budget]] += s.amount || 0; map[k].sum += s.amount || 0;
+    });
+    var rows = keys.map(function (k) { return map[k]; }).sort(function (a, c) { return c.sum - a.sum || a.name.localeCompare(c.name, "de"); });
+    var totals = periods.map(function (x, i) { return rows.reduce(function (a, r) { return a + r.cells[i]; }, 0); });
+    var seg = h("div", { class: "seg", role: "group", "aria-label": "Statistik nach" });
+    [["cat", "Kategorien"], ["place", "Orte"]].forEach(function (d) {
+      seg.append(h("button", { type: "button", "aria-pressed": String(statDim === d[0]), onclick: function () { statDim = d[0]; lsSet("pp-spendstat", statDim); renderSpend(); } }, d[1]));
+    });
+    var tbl = h("table", { class: "spstat" });
+    var hr = h("tr", null, h("th", { scope: "col" }, statDim === "place" ? "Ort" : "Kategorie"));
+    periods.forEach(function (x) { hr.append(h("th", { scope: "col", class: x.id === cur.id ? "now" : "", title: budgetLabel(x) }, x.name ? x.name : fmt(x.start))); });
+    hr.append(h("th", { scope: "col" }, "Summe"));
+    tbl.append(h("thead", null, hr));
+    var tb = h("tbody");
+    rows.forEach(function (r) {
+      var tr = h("tr", null, h("th", { scope: "row" }, r.name));
+      r.cells.forEach(function (c, i) { tr.append(h("td", { class: periods[i].id === cur.id ? "now" : "" }, c ? eur(c) : "–")); });
+      tr.append(h("td", { class: "sumc" }, eur(r.sum)));
+      tb.append(tr);
+    });
+    var tot = h("tr", { class: "tot" }, h("th", { scope: "row" }, "Gesamt"));
+    totals.forEach(function (c, i) { tot.append(h("td", { class: periods[i].id === cur.id ? "now" : "" }, eur(c))); });
+    tot.append(h("td", { class: "sumc" }, eur(totals.reduce(function (a, c) { return a + c; }, 0))));
+    tb.append(tot); tbl.append(tb);
+    var det = h("details", { class: "group fold" }, h("summary", null, h("h2", null, "Statistik"), h("span", { class: "chev", "aria-hidden": "true" })),
+      h("p", { class: "meta" }, "Ausgaben je Budget-Zeitraum (letzte " + periods.length + ")."), seg, h("div", { class: "spscroll" }, tbl));
+    det.open = lsGet("pp-fold-spendstat") !== "0";
+    det.addEventListener("toggle", function () { lsSet("pp-fold-spendstat", det.open ? "1" : "0"); });
+    box.append(det);
   }
 
   function syncControls() {
@@ -3070,6 +3238,7 @@
   $("tabset").addEventListener("click", function () { goSection("set"); });
   $("appver").textContent = String(CHANGELOG[0].v);
   $("shownews").addEventListener("click", function () { showChangelog(true); });
+  renderChangelogFull();
 
   /* Start */
   ROOMS.forEach(function (r) { $("newroom").append(h("option", { value: r }, r)); });
@@ -3093,7 +3262,7 @@
   $("caltoday").addEventListener("click", function () { calAnchor = calSel = dn(todayStr()); renderCal(); });
   $("calmode").addEventListener("click", function (e) {
     var v = e.target.getAttribute && e.target.getAttribute("data-v");
-    if (v !== "month" && v !== "week") return;
+    if (v !== "month" && v !== "week" && v !== "list") return;
     calMode = v; lsSet("pp-calmode", v);
     if (v === "week") calAnchor = calSel; else calAnchor = calSel;
     renderCal();
@@ -3146,9 +3315,13 @@
     p.then(function () { calSel = dn(date); calAnchor = calSel; closeEv(); toast("„" + title + "“ ist im Kalender."); }).catch(writeFail);
   });
   $("tabspend").addEventListener("click", function () { section = "spend"; lsSet("pp-section", "spend"); syncControls(); renderSpend(); });
-  $("budgetsel").addEventListener("change", function (e) {
-    curBudget = e.target.value; lsSet("pp-budget", curBudget); budgetForm = null; formBudget = null; renderSpend();
-  });
+  function stepBudget(dir) {   // dir -1 = vorheriges (älteres), +1 = nächstes (neueres)
+    var list = sortedBudgets(), b = resolveBudget(); if (!b) return;
+    var t = list[list.indexOf(b) - dir]; if (!t) return;
+    curBudget = t.id; lsSet("pp-budget", curBudget); budgetForm = null; formBudget = null; renderSpend();
+  }
+  $("budprev").addEventListener("click", function () { stepBudget(-1); });
+  $("budnext").addEventListener("click", function () { stepBudget(1); });
   $("budgetnew").addEventListener("click", function () { openBudgetForm("new", null); renderSpend(); $("bname").focus(); });
   $("budgetedit").addEventListener("click", function () { var b = resolveBudget(); if (!b) return; openBudgetForm("edit", b); renderSpend(); $("bname").focus(); });
   $("budgetcancel").addEventListener("click", function () { budgetForm = null; confirmBudgetDel = false; renderSpend(); });

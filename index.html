@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=74">
+<link rel="stylesheet" href="css/app.css?v=77">
 </head>
 <body>
 <p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
@@ -97,8 +97,8 @@
           <div><button class="linkbtn" type="button" id="busundo">↶ Letzten Eintrag zurücknehmen</button></div>
         </div>
         <div class="panel"><h2>Heute eingetragen</h2><ul class="bzlog" id="buslog"></ul></div>
-        <details class="panel bzrules">
-          <summary>Regeln</summary>
+        <details class="group fold bzrules">
+          <summary><h2>Regeln</h2><span class="chev" aria-hidden="true"></span></summary>
           <ul class="bzrulelist">
             <li><b>Bus gesehen und laut „Bus" gesagt:</b> +1 Feld, wer zuerst ruft.</li>
             <li><b>KölleBus</b> (Bus mit Blumenlogo): +2 Felder.</li>
@@ -382,6 +382,7 @@
       <div class="seg viewseg" id="calmode" role="group" aria-label="Ansicht Kalender">
         <button type="button" data-v="month" aria-pressed="true">Monat</button>
         <button type="button" data-v="week" aria-pressed="false">Woche</button>
+        <button type="button" data-v="list" aria-pressed="false">Liste</button>
       </div>
       <div class="weeknav">
         <button class="linkbtn" type="button" id="calprev" aria-label="Zurück">‹</button>
@@ -429,15 +430,20 @@
   </section>
 
   <section class="col" id="spendview" hidden>
-    <div class="cookhead" id="spendheadrow">
-      <p class="headline" id="spendhead" aria-live="polite">Ausgaben werden geladen …</p>
-      <button class="primary" type="button" id="spendopen" hidden>+ Ausgabe</button>
-    </div>
+    <p class="headline" id="spendhead" aria-live="polite">Ausgaben werden geladen …</p>
     <div id="spendbanner"></div>
-    <div class="row" id="budgetbar" hidden>
-      <select id="budgetsel" aria-label="Budget wählen"></select>
-      <button class="linkbtn" type="button" id="budgetedit">Bearbeiten</button>
-      <button class="linkbtn" type="button" id="budgetnew">+ Neues Budget</button>
+    <div class="panel budcard" id="budgetbar" hidden>
+      <div class="budnav">
+        <button class="navbtn" type="button" id="budprev" aria-label="Vorheriges Budget">‹</button>
+        <h2 id="budtitle">Budget</h2>
+        <button class="navbtn" type="button" id="budnext" aria-label="Nächstes Budget">›</button>
+      </div>
+      <div class="col" id="spendsum"></div>
+      <div class="budacts">
+        <button class="primary" type="button" id="spendopen" hidden>+ Ausgabe</button>
+        <button class="linkbtn" type="button" id="budgetedit">Bearbeiten</button>
+        <button class="linkbtn" type="button" id="budgetnew">+ Neues Budget</button>
+      </div>
     </div>
 
     <form class="panel" id="budgetform" autocomplete="off" hidden>
@@ -464,7 +470,6 @@
       </div>
     </form>
 
-    <div class="col" id="spendsum"></div>
 
     <form class="panel" id="spendform" autocomplete="off" hidden>
       <h2>Ausgabe eintragen</h2>
@@ -513,20 +518,23 @@
 
     <div class="col" id="spendcats"></div>
     <div class="col" id="spendlist"></div>
+    <div class="col" id="spendstat"></div>
   </section>
 <section class="col setview" id="setview" hidden>
-    <div class="setcard">
-      <h2>Konto</h2>
+    <details class="setcard group fold"><summary><h2>Konto</h2><span class="chev" aria-hidden="true"></span></summary>
+      <div class="setin">
       <p class="meta">Angemeldet als <b id="whoami"></b></p>
       <div class="row"><button class="linkbtn" type="button" id="dologout">Abmelden</button></div>
-    </div>
-    <div class="setcard">
-      <h2>Aussehen</h2>
+      </div>
+    </details>
+    <details class="setcard group fold"><summary><h2>Aussehen</h2><span class="chev" aria-hidden="true"></span></summary>
+      <div class="setin">
       <p class="meta">Farben für F und C</p>
       <div id="colorbox" class="colorbox"></div>
-    </div>
-    <div class="setcard">
-      <h2>Daten</h2>
+      </div>
+    </details>
+    <details class="setcard group fold"><summary><h2>Daten</h2><span class="chev" aria-hidden="true"></span></summary>
+      <div class="setin">
       <div class="row">
         <button class="linkbtn" type="button" id="doexport">Daten exportieren</button>
         <button class="linkbtn" type="button" id="doimport">Daten importieren</button>
@@ -535,10 +543,10 @@
       <div id="importconfirm" class="banner" hidden></div>
       <div class="row"><button class="linkbtn" type="button" id="doexample">Beispieldaten laden</button></div>
       <div id="setstatus" class="meta" role="status"></div>
-    </div>
-    <div class="setcard">
-      <h2>Erinnerung</h2>
-      <details class="subdet" id="pushbox"><summary>Erinnerung um 8:00 Uhr</summary>
+      </div>
+    </details>
+    <details class="setcard group fold"><summary><h2>Erinnerung</h2><span class="chev" aria-hidden="true"></span></summary>
+      <div class="setin">
       <p class="meta" id="pushinfo"></p>
       <div class="row" id="pushrow" hidden>
         <label for="pushwho">Für</label>
@@ -546,14 +554,16 @@
         <button class="linkbtn" type="button" id="pushtoggle">Einschalten</button>
         <button class="linkbtn" type="button" id="pushtest" hidden>Testnachricht</button>
       </div>
-      </details>
-    </div>
-    <div class="setcard">
-      <h2>Über die App</h2>
+      </div>
+    </details>
+    <details class="setcard group fold"><summary><h2>Über die App</h2><span class="chev" aria-hidden="true"></span></summary>
+      <div class="setin">
       <p class="meta">Version <b id="appver"></b></p>
       <div class="row"><button class="linkbtn" type="button" id="shownews">Was ist neu?</button></div>
+      <details class="group fold chlogbox"><summary><h2>Alle Änderungen (Changelog)</h2><span class="chev" aria-hidden="true"></span></summary><div id="chlog" class="chlog"></div></details>
       <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste (außer der Erinnerung um 8:00 Uhr, falls ihr sie einschaltet: Sie läuft verschlüsselt über den Push-Dienst eures Handys).</p>
-    </div>
+      </div>
+    </details>
   </section>
 <div id="morewrap" hidden>
   <div class="morescrim" id="morescrim"></div>
@@ -570,7 +580,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=74"></script>
-<script src="js/app.js?v=74"></script>
+<script src="js/store-supabase.js?v=77"></script>
+<script src="js/app.js?v=77"></script>
 </body>
 </html>
