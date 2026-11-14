@@ -829,3 +829,6 @@ li.task .tog { min-height: 30px; }
 .rectext { margin: 0; padding: 10px 12px; background: var(--bg); border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.92rem; line-height: 1.45; }
 .rectarea { width: 100%; box-sizing: border-box; font: inherit; resize: vertical; min-height: 7rem; }
 .rectarea { background: var(--bg); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px 12px; font-size: 1rem; }
+.newsver { margin: 10px 0 2px; font-weight: 700; color: var(--muted); font-size: 0.85rem; }
+.newslist { margin: 0 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.modal { max-height: 80vh; overflow-y: auto; }

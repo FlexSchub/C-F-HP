@@ -727,6 +727,33 @@
     document.addEventListener("keydown", onKey);
     yes.focus();
   }
+  /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
+  var CHANGELOG = [
+    { v: 68, t: ["Neu: Nach jedem Update zeigt ein Fenster, was sich geändert hat."] },
+    { v: 67, t: ["Fehler behoben: Im Kochbuch stand beim Aufklappen eines Gerichts „null“."] },
+    { v: 66, t: ["Kochbuch: Zu jedem Gericht kannst du jetzt ein Rezept speichern.", "Das Rezept bleibt versteckt, bis du „Rezept anzeigen“ drückst."] },
+    { v: 65, t: ["Die App startet immer auf der Startseite.", "Einkauf: Wenn alles bei einem Laden abgehakt ist, fragt ein Fenster, ob du die Kosten ins Budget einträgst."] }
+  ];
+  function showChangelog() {
+    var cur = CHANGELOG[0].v, seen = parseInt(lsGet("pp-seenver"), 10);
+    if (seen === cur || document.getElementById("newsbox")) return;
+    var list = CHANGELOG.filter(function (c) { return isNaN(seen) ? c.v === cur : c.v > seen; });
+    if (!list.length) { lsSet("pp-seenver", String(cur)); return; }
+    var close = function () { lsSet("pp-seenver", String(cur)); var m = document.getElementById("newsbox"); if (m) m.remove(); document.removeEventListener("keydown", onKey); };
+    var onKey = function (e) { if (e.key === "Escape") close(); };
+    var dlg = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "newsbox-t" }, h("h2", { id: "newsbox-t" }, "Was ist neu?"));
+    list.forEach(function (c) {
+      var ul = h("ul", { class: "newslist" });
+      c.t.forEach(function (x) { ul.append(h("li", null, x)); });
+      dlg.append(h("p", { class: "newsver" }, "Update " + c.v), ul);
+    });
+    var ok = h("button", { class: "primary", type: "button", onclick: close }, "Verstanden");
+    dlg.append(h("div", { class: "row" }, ok));
+    var back = h("div", { class: "modalback", id: "newsbox", onclick: function (e) { if (e.target === back) close(); } }, dlg);
+    document.body.append(back);
+    document.addEventListener("keydown", onKey);
+    ok.focus();
+  }
   function delItem(it) { if (db) db.doc("shop/" + it.id).delete().catch(writeFail); }
   function addItems(text) {
     if (!db || !curStore) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
@@ -1229,12 +1256,13 @@
       h("div", { class: "dishhead" }, title, labelsEl(r)),
       boltEl(r.effort), clockEl(r.minutes));
     if (isOpen) {
-      body.append(
+      body.append.apply(body, [
         h("div", { class: "dcount" }, ings.length + (ings.length === 1 ? " Zutat" : " Zutaten") + (nExtra ? " + " + nExtra + " Extra" + (nExtra === 1 ? "" : "s") : "")),
         h("p", { class: "dings" }, ingLine(r) || "Noch keine Zutaten eingetragen."),
         r.recipe ? h("button", { class: "linkbtn recbtn", type: "button", "aria-expanded": String(!!openRec[r.id]), onclick: function () { if (openRec[r.id]) delete openRec[r.id]; else openRec[r.id] = true; renderCook(); } }, openRec[r.id] ? "📖 Rezept ausblenden" : "📖 Rezept anzeigen") : null,
         r.recipe && openRec[r.id] ? h("p", { class: "rectext" }, r.recipe) : null,
-        h("button", { class: "linkbtn dedit", type: "button", onclick: function () { openEditor(r); } }, "Bearbeiten"));
+        h("button", { class: "linkbtn dedit", type: "button", onclick: function () { openEditor(r); } }, "Bearbeiten")
+      ].filter(Boolean));
     }
     return h("li", { class: "dish" + (on ? " on" : "") }, pick, body);
   }
@@ -3847,7 +3875,7 @@
     function enter(user) {
       $("whoami").textContent = (user && user.email) || "Konto";
       showView("app");
-      if (!dataStarted) { dataStarted = true; startData(store); }
+      if (!dataStarted) { dataStarted = true; startData(store); setTimeout(showChangelog, 600); }
     }
     sb.auth.onAuthStateChange(function (event, session) {
       if (event === "PASSWORD_RECOVERY") { recovering = true; authState("recover"); return; }
