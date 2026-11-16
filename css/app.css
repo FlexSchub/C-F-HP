@@ -465,7 +465,6 @@ label.chk input { width: 22px; height: 22px; min-height: 0; margin-top: 2px; fle
 .dclock .zt { color: var(--muted); }
 
 /* Farbauswahl */
-.subh { margin: 12px 0 4px; font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .colorbox { display: flex; flex-direction: column; gap: 10px; }
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .swatches .swl { min-width: 28px; text-align: center; }
@@ -622,12 +621,6 @@ li.task .tog:hover, li.task .tog:active { background: var(--accent); border-colo
 .top { position: relative; }
 .brand { flex-wrap: nowrap; align-items: center; }
 .brandtxt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.menubtn { display: inline-flex; align-items: center; gap: 10px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 14px; min-height: 44px; font-weight: 600; font-size: 0.92rem; flex: 0 0 auto; }
-.menubtn .burger { display: inline-flex; flex-direction: column; gap: 4px; }
-.menubtn .burger i { display: block; width: 18px; height: 2px; border-radius: 2px; background: currentColor; transition: transform 0.15s, opacity 0.15s; }
-.menubtn.open .burger i:nth-child(1) { transform: translateY(6px) rotate(45deg); }
-.menubtn.open .burger i:nth-child(2) { opacity: 0; }
-.menubtn.open .burger i:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
 .slabel2 { margin: 6px 0 2px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
 .favrow { margin-bottom: 4px; }
@@ -841,10 +834,6 @@ body.hasnetbar { padding-top: 34px; }
 .top .tab[aria-current="page"] .ico { background: var(--accent); color: #fff; }
 .toast { bottom: calc(var(--navh) + env(safe-area-inset-bottom, 0px)); z-index: 45; }
 .pickbar { bottom: calc(var(--navh) + 12px + env(safe-area-inset-bottom, 0px)); }
-.subdet { margin: 8px 0 0; }
-.subdet > summary { font-size: 0.85rem; color: var(--muted); cursor: pointer; padding: 6px 0; min-height: 32px; }
-.subdet .meta { font-size: 0.8rem; margin: 4px 0 8px; }
-.subdet .row { font-size: 0.85rem; }
 
 /* Navigation: 5 große Felder + „Mehr“ */
 :root { --navh: 68px; }
@@ -925,3 +914,10 @@ body.hasnetbar { padding-top: 34px; }
 .cn-pl { display: block; }
 .cathead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cathead h2 { margin: 0; }
+
+/* ehemals Inline-Styles (CSP ohne unsafe-inline) */
+#bootmsg, .noscr { padding: 8vh 16px; }
+#buslanes, #list { display: flex; flex-direction: column; }
+#buslanes { gap: 14px; }
+#list { gap: 18px; }
+#mealdays { gap: 10px; }

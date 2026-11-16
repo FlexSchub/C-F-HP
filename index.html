@@ -6,17 +6,17 @@
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
 <meta name="theme-color" content="#14614F">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=78">
+<link rel="stylesheet" href="css/app.css?v=79">
 </head>
 <body>
-<p class="note" id="bootmsg" style="padding:8vh 16px">Wird geladen …</p>
-<noscript><p class="note" style="padding:8vh 16px">Diese App braucht JavaScript.</p></noscript>
+<p class="note" id="bootmsg">Wird geladen …</p>
+<noscript><p class="note noscr">Diese App braucht JavaScript.</p></noscript>
 
 <main class="authbox" id="authview" hidden>
   <h1>Putzplan <span class="amp">F &amp; C</span></h1>
@@ -89,7 +89,7 @@
         <div class="bzbanner" id="buswin" role="status"></div>
         <div class="panel">
           <h2>Heute</h2>
-          <div id="buslanes" style="display:flex;flex-direction:column;gap:14px"></div>
+          <div id="buslanes"></div>
           <div class="bzguest">
             <input id="busguestname" type="text" maxlength="20" placeholder="Gast für heute, z. B. Oma" aria-label="Name des Gastes">
             <button class="linkbtn" type="button" id="busguestadd">+ Gast mitspielen lassen</button>
@@ -167,7 +167,7 @@
     </div>
 
     <div id="banner"></div>
-        <div id="list" style="display:flex;flex-direction:column;gap:18px"></div>
+        <div id="list"></div>
 
     <details class="add" id="addbox">
       <summary>Aufgabe hinzufügen</summary>
@@ -303,7 +303,7 @@
       <button class="linkbtn" type="button" id="weeknext" aria-label="Nächste Woche">›</button>
       <button class="linkbtn" type="button" id="weektoday">Diese Woche</button>
     </div>
-    <div class="col" id="mealdays" style="gap:10px"></div>
+    <div class="col" id="mealdays"></div>
     <button class="primary" type="button" id="mealshop" hidden>Woche festlegen und Zutaten prüfen</button>
     <p class="fair" id="mealshopnote" hidden>✓ Die Zutaten aller geplanten Gerichte dieser Woche sind geprüft und stehen auf den Einkaufslisten.</p>
     <button class="linkbtn" type="button" id="mealshopagain" hidden>Zutaten noch einmal prüfen</button>
@@ -545,23 +545,12 @@
       <div id="setstatus" class="meta" role="status"></div>
       </div>
     </details>
-    <details class="setcard group fold"><summary><h2>Erinnerung</h2><span class="chev" aria-hidden="true"></span></summary>
-      <div class="setin">
-      <p class="meta" id="pushinfo"></p>
-      <div class="row" id="pushrow" hidden>
-        <label for="pushwho">Für</label>
-        <select id="pushwho"><option value="F">F</option><option value="C">C</option></select>
-        <button class="linkbtn" type="button" id="pushtoggle">Einschalten</button>
-        <button class="linkbtn" type="button" id="pushtest" hidden>Testnachricht</button>
-      </div>
-      </div>
-    </details>
     <details class="setcard group fold"><summary><h2>Über die App</h2><span class="chev" aria-hidden="true"></span></summary>
       <div class="setin">
       <p class="meta">Version <b id="appver"></b></p>
       <div class="row"><button class="linkbtn" type="button" id="shownews">Was ist neu?</button></div>
       <details class="group fold chlogbox"><summary><h2>Alle Änderungen (Changelog)</h2><span class="chev" aria-hidden="true"></span></summary><div id="chlog" class="chlog"></div></details>
-      <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste (außer der Erinnerung um 8:00 Uhr, falls ihr sie einschaltet: Sie läuft verschlüsselt über den Push-Dienst eures Handys).</p>
+      <p class="foot">Eure Daten liegen in eurem eigenen Supabase-Projekt. Diese Seite lädt keine Schriften, Werbung oder Tracker und sendet nichts an andere Dienste.</p>
       </div>
     </details>
   </section>
@@ -580,7 +569,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=78"></script>
-<script src="js/app.js?v=78"></script>
+<script src="js/store-supabase.js?v=79"></script>
+<script src="js/app.js?v=79"></script>
 </body>
 </html>
