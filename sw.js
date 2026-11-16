@@ -9,7 +9,7 @@ self.addEventListener("activate", function (e) {
 self.addEventListener("fetch", function (e) {
   var r = e.request, u = new URL(r.url), key = u.origin + u.pathname;   // ohne ?v=… → alte Versionen stapeln sich nicht
   if (r.method !== "GET") return;
-  if (u.origin !== location.origin && u.hostname !== "cdn.jsdelivr.net") return;   // Supabase & Co. nie anfassen
+  if (u.origin !== location.origin) return;   // Supabase & Co. nie anfassen
   e.respondWith(fetch(r).then(function (res) {
     if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(key, copy); }); }
     return res;

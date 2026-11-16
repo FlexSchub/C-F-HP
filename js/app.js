@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 80, t: ["Die App lädt jetzt keine Dateien mehr von fremden Servern: Die Supabase-Bibliothek liegt nun bei euch (js/vendor). Sicherheitsregel entsprechend verschärft.", "Die App startet auch dann, wenn ein fremder Server ausfällt."] },
     { v: 79, t: ["Die tägliche Erinnerung (Push) wurde wieder entfernt, weil ihr sie nicht nutzt.", "Mehr Sicherheit: Die Seite erlaubt jetzt keine Inline-Styles mehr (strengere Inhaltsrichtlinie).", "Aufgeräumt: ungenutzte Stile entfernt; der Offline-Zwischenspeicher hält pro Datei nur noch eine Version."] },
     { v: 78, t: ["Zurück-Taste des Handys: Sie führt jetzt zum vorherigen Bereich der App (z. B. zurück zum Putzplan) und wirft dich nicht mehr aus der App.", "Ausgaben: Tipp auf ein Stück im Kreisdiagramm (oder auf eine Kategorie in der Liste) öffnet die Kategorie und zeigt, welche Posten darunter fallen. „‹ Alle Kategorien“ führt zurück."] },
     { v: 77, t: ["Startseite: „überfällig“ und „heute“ kleben nicht mehr am rechten Rand."] },
