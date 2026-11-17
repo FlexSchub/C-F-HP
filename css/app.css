@@ -921,3 +921,20 @@ body.hasnetbar { padding-top: 34px; }
 #buslanes { gap: 14px; }
 #list { gap: 18px; }
 #mealdays { gap: 10px; }
+
+/* Tagebuch */
+.drow { display: flex; flex-direction: column; gap: 6px; }
+.dname { font-size: 0.92rem; }
+.dscale { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.dscale button { border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); border-radius: 10px; min-height: 44px; font-size: 1rem; font-weight: 600; }
+.dscale button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.fl textarea, #dimptext { background: var(--bg); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px 12px; font: inherit; width: 100%; min-width: 0; box-sizing: border-box; }
+.dhist { overflow-x: auto; }
+.dtbl { border-collapse: collapse; font-size: 0.8rem; min-width: 100%; }
+.dtbl th, .dtbl td { border: 1px solid var(--line); padding: 5px 7px; text-align: center; white-space: nowrap; }
+.dtbl th { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.dtbl td.l { text-align: left; }
+.dtbl .dh1 { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.dtbl .dh2 { background: color-mix(in srgb, var(--accent) 48%, transparent); }
+.dtbl .dh3 { background: color-mix(in srgb, var(--accent) 78%, transparent); }
+.dday { border: 0; background: transparent; color: var(--ink); text-decoration: underline; font: inherit; padding: 6px 4px; min-height: 32px; }

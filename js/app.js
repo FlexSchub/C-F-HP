@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 81, t: ["Neu unter „Mehr“: Tagebuch. Beschwerden täglich von 0 bis 3 eintragen, Verlauf als farbige Tabelle, Text kopieren und alte Einträge importieren.", "Das Tagebuch funktioniert wie die anderen Bereiche: Einträge sind für F und C sichtbar und auf allen Geräten gleich. Einmalige SQL-Anpassung in Supabase nötig."] },
     { v: 80, t: ["Die App lädt jetzt keine Dateien mehr von fremden Servern: Die Supabase-Bibliothek liegt nun bei euch (js/vendor). Sicherheitsregel entsprechend verschärft.", "Die App startet auch dann, wenn ein fremder Server ausfällt."] },
     { v: 79, t: ["Die tägliche Erinnerung (Push) wurde wieder entfernt, weil ihr sie nicht nutzt.", "Mehr Sicherheit: Die Seite erlaubt jetzt keine Inline-Styles mehr (strengere Inhaltsrichtlinie).", "Aufgeräumt: ungenutzte Stile entfernt; der Offline-Zwischenspeicher hält pro Datei nur noch eine Version."] },
     { v: 78, t: ["Zurück-Taste des Handys: Sie führt jetzt zum vorherigen Bereich der App (z. B. zurück zum Putzplan) und wirft dich nicht mehr aus der App.", "Ausgaben: Tipp auf ein Stück im Kreisdiagramm (oder auf eine Kategorie in der Liste) öffnet die Kategorie und zeigt, welche Posten darunter fallen. „‹ Alle Kategorien“ führt zurück."] },
@@ -2772,6 +2773,7 @@
     else if (name === "spend") renderSpend();
     else if (name === "cook") renderCook();
     else if (name === "bus") busRender();
+    else if (name === "diary") diaryRender();
     if (after) after();
     try { window.scrollTo(0, 0); } catch (e) {}
   }
@@ -3249,13 +3251,14 @@
     $("spendview").hidden = section !== "spend";
     $("calview").hidden = section !== "cal";
     $("busview").hidden = section !== "bus";
+    $("diaryview").hidden = section !== "diary";
     $("homeview").hidden = section !== "home";
     $("setview").hidden = section !== "set";
-    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"], ["bus", "tabbus"], ["set", "tabset"]].forEach(function (p) {
+    [["home", "tabhome"], ["putz", "tabputz"], ["shop", "tabshop"], ["meal", "tabmeal"], ["cal", "tabcal"], ["spend", "tabspend"], ["bus", "tabbus"], ["diary", "tabdiary"], ["set", "tabset"]].forEach(function (p) {
       var b = $(p[1]);
       if (section === p[0] || (p[0] === "meal" && section === "cook")) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
-    var inMore = ["shop", "spend", "bus", "set"].indexOf(section) >= 0;
+    var inMore = ["shop", "spend", "bus", "diary", "set"].indexOf(section) >= 0;
     if (inMore) $("tabmore").setAttribute("aria-current", "page"); else $("tabmore").removeAttribute("aria-current");
     var curTab = $(section === "cook" ? "tabmeal" : "tab" + section);
     if (curTab && $("h1name")) $("h1name").textContent = curTab.getAttribute("data-title") || curTab.textContent;
@@ -3294,6 +3297,7 @@
   $("tabputz").addEventListener("click", function () { goSection("putz"); });
   $("tabshop").addEventListener("click", function () { goSection("shop"); });
   $("tabbus").addEventListener("click", function () { goSection("bus"); });
+  $("tabdiary").addEventListener("click", function () { goSection("diary"); });
   $("tabcal").addEventListener("click", function () { goSection("cal"); });
   $("calprev").addEventListener("click", function () { calStep(-1); });
   $("calnext").addEventListener("click", function () { calStep(1); });
@@ -3871,7 +3875,7 @@
   render();
 
   /* ---------- Daten: Supabase (über js/store-supabase.js) ---------- */
-  var COLLS = ["tasks", "log", "stores", "shop", "recipes", "plan", "budgets", "spend", "events", "bus"];
+  var COLLS = ["tasks", "log", "stores", "shop", "recipes", "plan", "budgets", "spend", "events", "bus", "diary"];
   var dataStarted = false;
 
   function listen(coll, apply) {
@@ -3879,6 +3883,154 @@
       apply(snap.docs.map(function (d) { return Object.assign({}, d.data(), { id: d.id }); }));
       if (section === "home") renderHome();
     }, function (e) { readFail(e); apply([]); });
+  }
+  /* ---------- Tagebuch (wie die anderen Bereiche: gemeinsame Sammlung „diary“, ein Dokument pro Tag, ID = Datum) ---------- */
+  var DFIELDS = [["unterleib", "Unterleib"], ["brueste", "Brüste"], ["reiz", "Reizbarkeit / Wut"], ["nied", "Niedergeschlagenheit"], ["angst", "Angst / Anspannung"], ["energie", "Müdigkeit"], ["migr", "Kopfschmerz / Migräne"], ["alltag", "Beeinträchtigung im Alltag"]];
+  var D_AUS = ["klar und dehnbar", "cremig / milchig", "wenig / trocken", "gelblich", "sonstiges"];
+  var D_BLUT = ["keine", "Schmierblutung", "schwach", "normal"];
+  var diary = {}, diaryReady = false, diaryDirty = false, diaryCur = {}, diaryAll = false, diaryBuilt = false, diaryMsgT = null;
+  function diaryDay(v) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+    var p = v.split("-").map(Number), d = new Date(p[0], p[1] - 1, p[2]);
+    return d.getFullYear() === p[0] && d.getMonth() === p[1] - 1 && d.getDate() === p[2] && p[0] >= 2000 && p[0] < 2100;
+  }
+  /* Nur bekannte Felder mit gültigen Werten (gilt für Speichern und Import) */
+  function diaryClean(e) {
+    var o = {};
+    DFIELDS.forEach(function (f) { var v = e[f[0]]; if (typeof v === "number" && v >= 0 && v <= 3 && v === Math.floor(v)) o[f[0]] = v; });
+    var note = String(e.note || "").replace(/\s+/g, " ").trim();
+    if (D_AUS.indexOf(e.aus) >= 0) o.aus = e.aus; else if (e.aus) note = ("Ausfluss: " + e.aus + (note ? ". " : "") + note);
+    if (D_BLUT.indexOf(e.blut) >= 0) o.blut = e.blut; else if (e.blut) note = ("Blutung: " + e.blut + (note ? ". " : "") + note);
+    if (note) o.note = note.slice(0, 500);
+    return o;
+  }
+  function diarySay(m) { var el = $("dmsg"); el.textContent = m; clearTimeout(diaryMsgT); diaryMsgT = setTimeout(function () { el.textContent = ""; }, 4000); }
+  function diaryFail(e) {
+    var c = e && e.code;
+    diarySay(c === "permission-denied" || c === "23514" ? "Gespeichert wurde nichts: Die einmalige Einrichtung in Supabase fehlt noch (siehe Anleitung zu Update 81)." : "Das hat nicht geklappt. Bitte Verbindung prüfen und noch einmal versuchen.");
+  }
+  function diaryBuild() {
+    if (diaryBuilt) return; diaryBuilt = true;
+    DFIELDS.forEach(function (f) {
+      var grp = h("div", { class: "dscale", role: "group", "aria-label": f[1] });
+      [0, 1, 2, 3].forEach(function (v) {
+        grp.append(h("button", { type: "button", "aria-pressed": "false", onclick: function () { diaryCur[f[0]] = v; diaryDirty = true; diaryPaint(); } }, String(v)));
+      });
+      grp.dataset.k = f[0];
+      $("dform").append(h("div", { class: "drow" }, h("span", { class: "dname" }, f[1]), grp));
+    });
+    D_AUS.forEach(function (v) { $("daus").append(h("option", { value: v }, v)); });
+    D_BLUT.forEach(function (v) { $("dblut").append(h("option", { value: v }, v)); });
+    $("ddate").value = todayStr();
+    $("ddate").addEventListener("change", diaryLoadDay);
+    $("dsave").addEventListener("click", diarySaveDay);
+    ["daus", "dblut", "dnote"].forEach(function (id) { $(id).addEventListener("input", function () { diaryDirty = true; }); $(id).addEventListener("change", function () { diaryDirty = true; }); });
+    $("ddel").addEventListener("click", function () {
+      var d = $("ddate").value;
+      if (!diary[d] || !db) { diarySay("Für diesen Tag gibt es keinen Eintrag."); return; }
+      if (!window.confirm("Eintrag vom " + diaryFmt(d) + " löschen?")) return;
+      db.doc("diary/" + d).delete().then(function () { delete diary[d]; diaryLoadDay(); diaryHist(); diarySay("Eintrag gelöscht."); }).catch(diaryFail);
+    });
+    $("dmore").addEventListener("click", function () { diaryAll = true; diaryHist(); });
+    $("dcopy").addEventListener("click", diaryCopy);
+    $("dimptoggle").addEventListener("click", function () { $("dimp").hidden = !$("dimp").hidden; });
+    $("dimpgo").addEventListener("click", diaryImport);
+  }
+  function diaryFmt(d) { var p = d.split("-"); return p[2] + "." + p[1] + "." + p[0].slice(2); }
+  function diaryPaint() {
+    Array.prototype.forEach.call($("dform").querySelectorAll(".dscale"), function (g) {
+      var k = g.dataset.k;
+      Array.prototype.forEach.call(g.children, function (b, i) { b.setAttribute("aria-pressed", String(diaryCur[k] === i)); });
+    });
+  }
+  function diaryLoadDay() {
+    diaryDirty = false;
+    var e = diary[$("ddate").value] || {};
+    diaryCur = {};
+    DFIELDS.forEach(function (f) { if (typeof e[f[0]] === "number") diaryCur[f[0]] = e[f[0]]; });
+    $("daus").value = e.aus || ""; $("dblut").value = e.blut || ""; $("dnote").value = e.note || "";
+    diaryPaint();
+  }
+  function diarySaveDay() {
+    var d = $("ddate").value;
+    if (!diaryDay(d)) { diarySay("Bitte ein gültiges Datum wählen."); return; }
+    if (!db || !diaryReady) return;
+    var e = diaryClean({ unterleib: diaryCur.unterleib, brueste: diaryCur.brueste, reiz: diaryCur.reiz, nied: diaryCur.nied, angst: diaryCur.angst, energie: diaryCur.energie, migr: diaryCur.migr, alltag: diaryCur.alltag,
+      aus: $("daus").value, blut: $("dblut").value, note: $("dnote").value });
+    db.doc("diary/" + d).set(e).then(function () { diary[d] = e; diaryDirty = false; diaryHist(); diarySay("Gespeichert."); }).catch(diaryFail);
+  }
+  function diaryHist() {
+    var keys = Object.keys(diary).sort().reverse(), t = $("dtbl");
+    $("dempty").hidden = keys.length > 0;
+    $("dmore").hidden = diaryAll || keys.length <= 31;
+    t.textContent = "";
+    if (!keys.length) return;
+    if (!diaryAll) keys = keys.slice(0, 31);
+    var head = h("tr", null, h("th", null, "Tag"));
+    DFIELDS.forEach(function (f) { head.append(h("th", null, f[1].split(" ")[0])); });
+    head.append(h("th", null, "Ausfluss"), h("th", null, "Blutung"));
+    t.append(head);
+    keys.forEach(function (k) {
+      var e = diary[k], tr = h("tr", null, h("td", { class: "l" }, h("button", { type: "button", class: "dday", onclick: function () { $("ddate").value = k; diaryLoadDay(); try { $("diarymain").scrollIntoView({ block: "start" }); } catch (x) {} } }, diaryFmt(k))));
+      DFIELDS.forEach(function (f) {
+        var v = e[f[0]];
+        tr.append(typeof v === "number" ? h("td", { class: "dh" + v }, String(v)) : h("td", null, "-"));
+      });
+      tr.append(h("td", { class: "l" }, e.aus || "-"), h("td", { class: "l" }, e.blut || "-"));
+      t.append(tr);
+    });
+  }
+  function diaryText() {
+    var head = ["Datum"].concat(DFIELDS.map(function (f) { return f[1]; })).concat(["Ausfluss", "Blutung", "Notizen"]).join("\t");
+    var lines = Object.keys(diary).sort().map(function (k) {
+      var e = diary[k];
+      return [k].concat(DFIELDS.map(function (f) { return typeof e[f[0]] === "number" ? e[f[0]] : ""; })).concat([e.aus || "", e.blut || "", (e.note || "").replace(/\s+/g, " ")]).join("\t");
+    });
+    return [head].concat(lines).join("\n");
+  }
+  function diaryCopy() {
+    if (!Object.keys(diary).length) { diarySay("Es gibt noch nichts zu kopieren."); return; }
+    try { navigator.clipboard.writeText(diaryText()).then(function () { diarySay("Kopiert. Du kannst es z. B. in eine Notiz einfügen."); }, function () { diarySay("Kopieren nicht möglich."); }); }
+    catch (e) { diarySay("Kopieren nicht möglich."); }
+  }
+  function diaryImport() {
+    var ta = $("dimptext"), list = [], o = DFIELDS.length + 1, bad = 0, seen = {};
+    ta.value.split(/\r?\n/).forEach(function (l) {
+      var c = l.split("\t"), d = (c[0] || "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}/.test(d)) return;   // Kopfzeile und Leerzeilen überspringen
+      if (!diaryDay(d)) { bad++; return; }
+      var e = {};
+      DFIELDS.forEach(function (f, i) { var v = (c[i + 1] || "").trim(); if (/^[0-3]$/.test(v)) e[f[0]] = Number(v); });
+      e.aus = (c[o] || "").trim(); e.blut = (c[o + 1] || "").trim(); e.note = (c[o + 2] || "").trim();
+      seen[d] = diaryClean(e);
+    });
+    Object.keys(seen).forEach(function (d) { list.push({ day: d, data: seen[d] }); });
+    if (!list.length) { diarySay("Keine Einträge erkannt. Bitte den Text unverändert einfügen."); return; }
+    if (list.length > 5000) { diarySay("Das sind zu viele Tage auf einmal (höchstens 5000)."); return; }
+    if (!db) return;
+    var chunks = [];
+    for (var i = 0; i < list.length; i += 400) chunks.push(list.slice(i, i + 400));
+    chunks.reduce(function (pr, ch) {
+      return pr.then(function () { var b = db.batch(); ch.forEach(function (x) { b.set(db.doc("diary/" + x.day), x.data); }); return b.commit(); });
+    }, Promise.resolve()).then(function () {
+      list.forEach(function (x) { diary[x.day] = x.data; });
+      ta.value = ""; $("dimp").hidden = true; diaryLoadDay(); diaryHist();
+      diarySay(list.length + (list.length === 1 ? " Tag übernommen." : " Tage übernommen.") + (bad ? " " + bad + " Zeile(n) mit ungültigem Datum ausgelassen." : ""));
+    }).catch(diaryFail);
+  }
+  /* Live-Daten aus der Sammlung „diary“ (auch Änderungen vom anderen Gerät kommen hier an) */
+  function diaryApply(arr) {
+    diary = {};
+    arr.forEach(function (r) { var id = r.id, d = Object.assign({}, r); delete d.id; if (diaryDay(id)) diary[id] = d; });
+    diaryReady = true;
+    if (!diaryBuilt) return;
+    $("diaryhead").hidden = true; $("diarymain").hidden = false; $("dhistbox").hidden = false;
+    diaryHist();
+    if (!diaryDirty) diaryLoadDay();
+  }
+  function diaryRender() {
+    diaryBuild();
+    if (diaryReady) { $("diaryhead").hidden = true; $("diarymain").hidden = false; $("dhistbox").hidden = false; diaryLoadDay(); diaryHist(); }
   }
   /* Hinweisleiste: offline bzw. Änderungen warten auf Verbindung */
   function setupNetBar(store) {
@@ -3931,6 +4083,7 @@
     });
     listen("events", function (a) { events = a; eventsLoaded = true; if (!evDraft) renderCal(); });
     listen("bus", function (a) { busAll = a; busRefresh(); });
+    listen("diary", function (a) { diaryApply(a); });
     listen("spend", function (a) { spends = a; spendsLoaded = true; renderSpend(); ensureRepeats(); });
     store.start();
   }
