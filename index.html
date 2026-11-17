@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=81">
+<link rel="stylesheet" href="css/app.css?v=82">
 </head>
 <body>
 <p class="note" id="bootmsg">Wird geladen …</p>
@@ -531,6 +531,7 @@
       <div class="two">
         <label class="fl" for="sdate">Datum
           <input id="sdate" type="date" required>
+          <span class="meta" id="sdatehint" hidden></span>
         </label>
         <label class="fl" for="srepeat">Wiederkehrend?
           <select id="srepeat">
@@ -606,9 +607,9 @@
 
 <div class="toast" id="toast" hidden><div class="toast-in"><span id="toasttext"></span><button type="button" id="toastbtn" hidden></button></div></div>
 
-<script src="js/vendor/supabase.js?v=81"></script>
+<script src="js/vendor/supabase.js?v=82"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=81"></script>
-<script src="js/app.js?v=81"></script>
+<script src="js/store-supabase.js?v=82"></script>
+<script src="js/app.js?v=82"></script>
 </body>
 </html>

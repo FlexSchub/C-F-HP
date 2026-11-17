@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 82, t: ["Ausgaben: Zahlungen in der Zukunft sind jetzt möglich, z. B. Nebenkosten, die erst nächstes Jahr kommen. Sie erscheinen unter „Geplante Zahlungen“ und wandern automatisch ins passende Budget, sobald es dieses gibt.", "Startseite: Ein Tipp auf einen Termin öffnet ihn direkt im Kalender."] },
     { v: 81, t: ["Neu unter „Mehr“: Tagebuch. Beschwerden täglich von 0 bis 3 eintragen, Verlauf als farbige Tabelle, Text kopieren und alte Einträge importieren.", "Das Tagebuch funktioniert wie die anderen Bereiche: Einträge sind für F und C sichtbar und auf allen Geräten gleich. Einmalige SQL-Anpassung in Supabase nötig."] },
     { v: 80, t: ["Die App lädt jetzt keine Dateien mehr von fremden Servern: Die Supabase-Bibliothek liegt nun bei euch (js/vendor). Sicherheitsregel entsprechend verschärft.", "Die App startet auch dann, wenn ein fremder Server ausfällt."] },
     { v: 79, t: ["Die tägliche Erinnerung (Push) wurde wieder entfernt, weil ihr sie nicht nutzt.", "Mehr Sicherheit: Die Seite erlaubt jetzt keine Inline-Styles mehr (strengere Inhaltsrichtlinie).", "Aufgeräumt: ungenutzte Stile entfernt; der Offline-Zwischenspeicher hält pro Datei nur noch eine Version."] },
@@ -2267,9 +2268,9 @@
     var t = isAllDay(e) ? "ganztägig" : e.start + (e.end ? "–" + e.end : "");
     return multi ? t + " · " + fmt(String(e.date)) + "–" + fmt(evEndStr(e)) : t;
   }
-  function evRow(e) {
+  function evRow(e, onOpen) {
     var w = evWho(e);
-    return h("button", { class: "evrow " + w, type: "button", onclick: function () { openEv(e, null); } },
+    return h("button", { class: "evrow " + w, type: "button", onclick: onOpen || function () { openEv(e, null); } },
       h("span", { class: "evtop" }, h("span", { class: "evtime" }, evTimeText(e)), h("span", { class: "evwho " + w }, WHO_NAMES[w])),
       h("span", { class: "evtitle" }, e.title || "Termin"),
       e.place ? h("span", { class: "evplace" }, e.place) : null);
@@ -2796,13 +2797,13 @@
     if (eventsLoaded) {
       var evs = eventsOn(ts);
       var body = [];
-      if (evs.length) { var l = h("div", { class: "evlist" }); evs.forEach(function (e) { l.append(evRow(e)); }); body.push(l); }
+      if (evs.length) { var l = h("div", { class: "evlist" }); evs.forEach(function (e) { l.append(evRow(e, function () { goSection("cal", function () { openEv(e, null); }); })); }); body.push(l); }
       else body.push(h("p", { class: "noneyet" }, "Heute keine Termine."));
       var soon = [];
       for (var i = 1; i <= 7 && soon.length < 3; i++) eventsOn(dnToStr(today + i)).forEach(function (e) { if (soon.length < 3 && !(String(e.date) < dnToStr(today + i))) soon.push({ n: today + i, e: e }); });
       if (soon.length) {
         var ul = h("ul", { class: "soon" });
-        soon.forEach(function (x) { ul.append(h("li", null, h("span", { class: "dot " + evWho(x.e) }), h("span", { class: "sd" }, WD[(x.n + 3) % 7] + " " + dayLabel(x.n)), h("span", null, x.e.title || "Termin"))); });
+        soon.forEach(function (x) { ul.append(h("li", null, h("button", { class: "soonbtn", type: "button", onclick: function () { goSection("cal", function () { openEv(x.e, null); }); } }, h("span", { class: "dot " + evWho(x.e) }), h("span", { class: "sd" }, WD[(x.n + 3) % 7] + " " + dayLabel(x.n)), h("span", null, x.e.title || "Termin")))); });
         body.push(h("p", { class: "slabel" }, "In den nächsten Tagen"), ul);
       }
       box.append(homeCard("Termine", "cal", body, "Kalender"));
@@ -2886,6 +2887,22 @@
   function pct(x) { return x.toFixed(1).replace(".", ",") + " %"; }
   function budgetLabel(b) { return (b.name ? b.name + " · " : "") + fmt(b.start) + "–" + fmtY(b.end); }
   function sortedBudgets() { return (budgets || []).slice().sort(function (a, b) { return String(b.start).localeCompare(String(a.start)); }); }
+  /* Zahlungen in der Zukunft: Liegt das Datum in einem vorhandenen Budget, gehört sie dorthin. Liegt es hinter allen Budgets,
+     wird sie als „geplant“ gemerkt (ohne Budget) und rutscht automatisch ins passende Budget, sobald es das gibt. */
+  function budgetFor(date, prefer) {
+    if (prefer && prefer.start <= date && date <= prefer.end) return prefer;
+    return sortedBudgets().filter(function (x) { return x.start <= date && date <= x.end; })[0] || null;
+  }
+  function lastBudgetEnd() { return (budgets || []).reduce(function (m, x) { return String(x.end) > m ? String(x.end) : m; }, ""); }
+  function syncSdateHint() {
+    var el = $("sdatehint"), b = resolveBudget(), d = $("sdate").value;
+    if (!el) return;
+    var txt = "";
+    if (b && d && !budgetFor(d, b) && d > lastBudgetEnd()) txt = "Liegt in der Zukunft: wird als geplante Zahlung gemerkt und zählt, sobald das Budget für diesen Zeitraum da ist.";
+    else if (b && d && !budgetFor(d, b)) txt = "Für dieses Datum gibt es kein Budget.";
+    else if (b && d && b.id !== (budgetFor(d, b) || {}).id) txt = "Wird im Budget „" + (budgetFor(d, b).name || fmt(budgetFor(d, b).start)) + "“ gebucht.";
+    el.textContent = txt; el.hidden = !txt;
+  }
   function resolveBudget() {
     var list = sortedBudgets();
     var hit = list.filter(function (b) { return b.id === curBudget; })[0];
@@ -2964,11 +2981,26 @@
         cur = Object.assign({ id: id }, ns); n++;
       }
     });
+    spends.forEach(function (x) {
+      if (!x.planned || x.budget || repPending[x.id]) return;
+      var bud = allB.filter(function (b2) { return b2.start <= x.date && x.date <= b2.end; })[0];
+      if (!bud) return;
+      repPending[x.id] = true;
+      var d2 = Object.assign({}, x); delete d2.id; delete d2.planned; d2.budget = bud.id;
+      writes.push(["spend/" + x.id, d2, x.id, true]);
+    });
     if (!writes.length) return;
     repBusy = true;
     var chain = Promise.resolve();
     writes.forEach(function (w) { chain = chain.then(function () { return db.doc(w[0]).set(w[1]); }).then(function () { delete repPending[w[2]]; }, function (e) { delete repPending[w[2]]; throw e; }); });
-    chain.then(function () { repBusy = false; toast(writes.length === 1 ? "Eine wiederkehrende Buchung wurde automatisch angelegt." : writes.length + " wiederkehrende Buchungen wurden automatisch angelegt."); })
+    var planN = writes.filter(function (w) { return w[3]; }).length, recN = writes.length - planN;
+    chain.then(function () {
+      repBusy = false;
+      var parts2 = [];
+      if (recN) parts2.push(recN === 1 ? "Eine wiederkehrende Buchung wurde automatisch angelegt." : recN + " wiederkehrende Buchungen wurden automatisch angelegt.");
+      if (planN) parts2.push(planN === 1 ? "Eine geplante Zahlung wurde ins Budget übernommen." : planN + " geplante Zahlungen wurden ins Budget übernommen.");
+      toast(parts2.join(" "));
+    })
       .catch(function (e) { repBusy = false; writeFail(e); });
   }
   function stopBudgetSeries(b) {
@@ -3163,8 +3195,7 @@
     if (formBudget !== b.id) {
       var t = todayStr();
       $("sdate").value = t < b.start ? b.start : t > b.end ? b.end : t;
-      $("sdate").min = b.start; $("sdate").max = b.end;
-      formBudget = b.id;
+      formBudget = b.id; syncSdateHint();
     }
 
     /* Liste */
@@ -3185,6 +3216,22 @@
       sdet.open = lsGet("pp-fold-spend") !== "0";
       sdet.addEventListener("toggle", function () { lsSet("pp-fold-spend", sdet.open ? "1" : "0"); });
       lst.append(sdet);
+    }
+    var planned = spends.filter(function (x) { return x.planned && !x.budget; }).sort(function (a, c) { return String(a.date).localeCompare(String(c.date)); });
+    if (planned.length) {
+      var pl = h("ul", { class: "spends" });
+      planned.forEach(function (s) {
+        var meta = [String(s.category || "").trim() || "Sonstiges", s.place, s.date ? fmt(s.date) : "", repeatText(s) ? "↻ " + repeatText(s) : ""].filter(Boolean).join(" · ");
+        pl.append(h("li", null,
+          h("span", { class: "sw" }, s.what || String(s.category || "").trim() || "Zahlung"),
+          h("span", { class: "sa" }, eur(s.amount || 0)),
+          h("button", { class: "x", type: "button", "aria-label": "Geplante Zahlung löschen", onclick: function () { delSpend(s); } }, "×"),
+          h("span", { class: "sm" }, meta)));
+      });
+      var pdet = h("details", { class: "group fold" }, h("summary", null, h("h2", null, "Geplante Zahlungen", h("span", { class: "n" }, String(planned.length))), h("span", { class: "chev", "aria-hidden": "true" })), pl);
+      pdet.open = lsGet("pp-fold-plan") !== "0";
+      pdet.addEventListener("toggle", function () { lsSet("pp-fold-plan", pdet.open ? "1" : "0"); });
+      lst.append(pdet);
     }
     renderCats(cats, mine, spent);
     renderSpendStats($("spendstat"), list, b);
@@ -3409,7 +3456,13 @@
     var cents = parseEuro($("samount").value);
     if (!cents) { toast("Gib einen Betrag ein, z. B. 12,50."); $("samount").focus(); return; }
     var date = $("sdate").value || todayStr();
-    var doc = { budget: b.id, amount: cents, category: $("scat").value.trim() || "Sonstiges", place: $("splace").value.trim(), what: $("swhat").value.trim(), date: date, by: me || "", at: Date.now() };
+    var tb = budgetFor(date, b), planned = false;
+    if (!tb) {
+      if (date > lastBudgetEnd()) planned = true;
+      else { toast("Für dieses Datum gibt es kein Budget. Wähle ein Datum innerhalb eines Budgets oder lege zuerst ein Budget an."); $("sdate").focus(); return; }
+    }
+    var doc = { budget: planned ? "" : tb.id, amount: cents, category: $("scat").value.trim() || "Sonstiges", place: $("splace").value.trim(), what: $("swhat").value.trim(), date: date, by: me || "", at: Date.now() };
+    if (planned) doc.planned = true;
     var rep = $("srepeat").value;
     var sref = db.collection("spend").doc();
     if (REPEAT_LABEL[rep]) { doc.repeat = rep; doc.series = sref.id; doc.origin = date; }
@@ -3422,10 +3475,12 @@
     }
     sref.set(doc).then(function () {
       $("samount").value = ""; $("swhat").value = ""; $("splace").value = ""; $("srepeat").value = ""; syncRepeat();
-      toast(eur(cents) + " eingetragen." + (doc.repeat ? " Wiederholt sich " + repeatText(doc) + "." : ""));
+      toast(eur(cents) + (planned ? " als geplante Zahlung für den " + fmt(date) + " gemerkt." : " eingetragen.") + (doc.repeat ? " Wiederholt sich " + repeatText(doc) + "." : ""));
       spendOpen = false; renderSpend();
     }).catch(writeFail);
   });
+  $("sdate").addEventListener("input", syncSdateHint);
+  $("sdate").addEventListener("change", syncSdateHint);
   ["mealseg", "cookmealseg"].forEach(function (id) {
     $(id).addEventListener("click", function (e) {
       var v = e.target.getAttribute && e.target.getAttribute("data-go");
