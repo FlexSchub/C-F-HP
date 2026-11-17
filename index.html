@@ -9,10 +9,11 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
 <meta name="theme-color" content="#14614F">
+<script src="js/theme.js?v=88"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=87">
+<link rel="stylesheet" href="css/app.css?v=88">
 </head>
 <body>
 <p class="note" id="bootmsg">Wird geladen …</p>
@@ -568,6 +569,13 @@
     </details>
     <details class="setcard group fold"><summary><h2>Aussehen</h2><span class="chev" aria-hidden="true"></span></summary>
       <div class="setin">
+      <p class="meta" id="themelabel">Darstellung</p>
+      <div class="seg" id="themeseg" role="group" aria-labelledby="themelabel">
+        <button type="button" data-v="" aria-pressed="false">System</button>
+        <button type="button" data-v="light" aria-pressed="false">Hell</button>
+        <button type="button" data-v="dark" aria-pressed="false">Dunkel</button>
+      </div>
+      <p class="meta" id="themehint"></p>
       <p class="meta">Farben für F und C</p>
       <div id="colorbox" class="colorbox"></div>
       </div>
@@ -607,9 +615,9 @@
 
 <div class="toast" id="toast" hidden><div class="toast-in"><span id="toasttext"></span><button type="button" id="toastbtn" hidden></button></div></div>
 
-<script src="js/vendor/supabase.js?v=87"></script>
+<script src="js/vendor/supabase.js?v=88"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=87"></script>
-<script src="js/app.js?v=87"></script>
+<script src="js/store-supabase.js?v=88"></script>
+<script src="js/app.js?v=88"></script>
 </body>
 </html>
