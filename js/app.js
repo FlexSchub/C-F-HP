@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 84, t: ["Das „Mehr“-Menü öffnet sich jetzt als schmale Zeile direkt über der unteren Leiste (gleiche Höhe), statt als große Fläche. „Einstellungen“ heißt im Menü kurz „Settings“."] },
     { v: 83, t: ["Tagebuch: wieder in den Beerenfarben des ursprünglichen Symptomtagebuchs (hell und dunkel)."] },
     { v: 82, t: ["Ausgaben: Zahlungen in der Zukunft sind jetzt möglich, z. B. Nebenkosten, die erst nächstes Jahr kommen. Sie erscheinen unter „Geplante Zahlungen“ und wandern automatisch ins passende Budget, sobald es dieses gibt.", "Startseite: Ein Tipp auf einen Termin öffnet ihn direkt im Kalender."] },
     { v: 81, t: ["Neu unter „Mehr“: Tagebuch. Beschwerden täglich von 0 bis 3 eintragen, Verlauf als farbige Tabelle, Text kopieren und alte Einträge importieren.", "Das Tagebuch funktioniert wie die anderen Bereiche: Einträge sind für F und C sichtbar und auf allen Geräten gleich. Einmalige SQL-Anpassung in Supabase nötig."] },

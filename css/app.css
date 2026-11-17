@@ -841,13 +841,13 @@ body.hasnetbar { padding-top: 34px; }
 .top .tab .ico { width: 58px; height: 32px; }
 .top .tab svg { width: 24px; height: 24px; }
 .morescrim { position: fixed; inset: 0; z-index: 38; background: rgba(16, 26, 25, .45); }
-.moresheet { position: fixed; z-index: 39; left: 0; right: 0; bottom: calc(var(--navh) + env(safe-area-inset-bottom, 0px)); max-width: 40rem; margin-inline: auto; background: var(--surface); border-radius: 24px 24px 0 0; padding: 18px 16px 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; box-shadow: 0 -8px 30px rgba(0,0,0,.2); animation: moresheetin .18s ease-out; }
+.moresheet { position: fixed; z-index: 39; left: 0; right: 0; bottom: calc(var(--navh) + env(safe-area-inset-bottom, 0px)); height: var(--navh); max-width: 40rem; margin-inline: auto; background: var(--surface); border-radius: 0; padding: 0; display: flex; gap: 0; box-shadow: 0 -1px 0 var(--line), 0 -8px 24px rgba(0,0,0,.12); animation: moresheetin .14s ease-out; }
 @keyframes moresheetin { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .moresheet { animation: none; } }
-.moresheet .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 92px; border: 0; border-radius: 18px; background: var(--bg); color: var(--ink); font-weight: 600; font-size: 0.95rem; }
-.moresheet .cell .big svg { width: 30px; height: 30px; }
-.moresheet .cell[aria-current="page"] { background: var(--accent); color: #fff; }
-.moresheet .cell:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.moresheet .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; flex: 1 1 0; min-width: 0; min-height: 0; height: 100%; padding: 0 2px; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-weight: 600; font-size: 0.78rem; }
+.moresheet .cell .big svg { width: 22px; height: 22px; }
+.moresheet .cell[aria-current="page"] { background: transparent; color: var(--accent); }
+.moresheet .cell:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 
 /* Einstellungen als eigene Seite */
 .setcard { background: var(--surface); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 6px 18px rgba(0,0,0,.05); }
@@ -947,3 +947,5 @@ body.sec-diary { --bg: #faf6f8; --surface: #ffffff; --ink: #2b2230; --muted: #7b
   :root:not([data-theme="light"]) body.sec-diary { --bg: #1d1720; --surface: #2a2230; --ink: #f1e9f3; --muted: #b3a5ba; --line: #403647; --line-strong: #5a4b63; --accent: #c88bb9; --accent-ink: #ffffff; --hi: #9a4d68; }
 }
 :root[data-theme="dark"] body.sec-diary { --bg: #1d1720; --surface: #2a2230; --ink: #f1e9f3; --muted: #b3a5ba; --line: #403647; --line-strong: #5a4b63; --accent: #c88bb9; --accent-ink: #ffffff; --hi: #9a4d68; }
+.moresheet .cell { white-space: nowrap; }
+@media (max-width: 370px) { .moresheet .cell { font-size: 0.7rem; letter-spacing: -0.01em; } }
