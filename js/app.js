@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 85, t: ["Im „Mehr“-Menü heißt das Bus-Rennen jetzt kurz „Bus!“."] },
     { v: 84, t: ["Das „Mehr“-Menü öffnet sich jetzt als schmale Zeile direkt über der unteren Leiste (gleiche Höhe), statt als große Fläche. „Einstellungen“ heißt im Menü kurz „Settings“."] },
     { v: 83, t: ["Tagebuch: wieder in den Beerenfarben des ursprünglichen Symptomtagebuchs (hell und dunkel)."] },
     { v: 82, t: ["Ausgaben: Zahlungen in der Zukunft sind jetzt möglich, z. B. Nebenkosten, die erst nächstes Jahr kommen. Sie erscheinen unter „Geplante Zahlungen“ und wandern automatisch ins passende Budget, sobald es dieses gibt.", "Startseite: Ein Tipp auf einen Termin öffnet ihn direkt im Kalender."] },
