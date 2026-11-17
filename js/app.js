@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 87, t: ["„Mehr“-Menü: Die Zeile steigt jetzt mit einer kleinen Animation hinter der unteren Leiste auf, und eine schmale grüne Linie trennt die beiden Zeilen, solange das Menü offen ist."] },
     { v: 86, t: ["„Ausgaben“ heißt jetzt „Finanzen“.", "Neue Reihenfolge im „Mehr“-Menü (von links nach rechts): Settings, Bus!, Tagebuch, Einkauf, Finanzen – das Häufigste liegt rechts nah am Daumen."] },
     { v: 85, t: ["Im „Mehr“-Menü heißt das Bus-Rennen jetzt kurz „Bus!“."] },
     { v: 84, t: ["Das „Mehr“-Menü öffnet sich jetzt als schmale Zeile direkt über der unteren Leiste (gleiche Höhe), statt als große Fläche. „Einstellungen“ heißt im Menü kurz „Settings“."] },
@@ -3322,6 +3323,7 @@
     var w = $("morewrap"), b = $("tabmore");
     if (!w || !b) return;
     w.hidden = !open;
+    document.body.classList.toggle("more-open", !!open);
     b.setAttribute("aria-expanded", String(!!open));
     if (open) { var f = w.querySelector("[aria-current=page]") || w.querySelector(".cell"); if (f) f.focus(); }
   }
