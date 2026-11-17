@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 86, t: ["„Ausgaben“ heißt jetzt „Finanzen“.", "Neue Reihenfolge im „Mehr“-Menü (von links nach rechts): Settings, Bus!, Tagebuch, Einkauf, Finanzen – das Häufigste liegt rechts nah am Daumen."] },
     { v: 85, t: ["Im „Mehr“-Menü heißt das Bus-Rennen jetzt kurz „Bus!“."] },
     { v: 84, t: ["Das „Mehr“-Menü öffnet sich jetzt als schmale Zeile direkt über der unteren Leiste (gleiche Höhe), statt als große Fläche. „Einstellungen“ heißt im Menü kurz „Settings“."] },
     { v: 83, t: ["Tagebuch: wieder in den Beerenfarben des ursprünglichen Symptomtagebuchs (hell und dunkel)."] },
@@ -762,7 +763,7 @@
     ["Einkauf", ["Läden mit Gängen, Schnell-Hinzufügen mit Vorschlägen, Vorrat („immer da“), Chips zum Wieder-Hinzufügen.", "Bearbeiten-Modus für einzelne Einträge und Läden, Abfrage beim Verwenden von Vorrat."]],
     ["Kochbuch und Essensplan", ["Speisekarte mit Zeit, Aufwand und Labels (grün = muss, rot = ausschließen), Suche, Beilagen mit eigenem Label.", "Essensplan: Woche planen mit Würfel, gemerkte Filter je Wochentag und Mahlzeit, Tage klappbar mit grünem Kopf, M:/A:-Zeilen, getrennte Mahlzeiten für F und C.", "Zutaten der geplanten Woche gehen auf Wunsch direkt auf die Einkaufsliste (auch alle auf einmal abhaken)."]],
     ["Kalender", ["Monats- und Wochenansicht, Termine mit Person, Zeit, Ort, Notiz und Wiederholung, Import und Export (.ics)."]],
-    ["Ausgaben", ["Budgets mit Zeitraum und automatischer Wiederholung, Kategorien mit Diagramm, wiederkehrende Ausgaben, klappbarer Verlauf."]],
+    ["Finanzen", ["Budgets mit Zeitraum und automatischer Wiederholung, Kategorien mit Diagramm, wiederkehrende Ausgaben, klappbarer Verlauf."]],
     ["Bus-Rennen", ["Spiel zum Bus-Zählen mit Punkten und Regeln, Auspuff-Animation beim Vorrücken, Explosion bei Flaschen-Fehlern."]]
   ];
   function renderChangelogFull() {
@@ -3126,12 +3127,12 @@
     function hideAll() { parts.forEach(function (id) { $(id).hidden = true; }); }
     var ban = $("spendbanner"); ban.replaceChildren();
     if (dbMissing) {
-      head.textContent = "Ausgaben";
+      head.textContent = "Finanzen";
       hideAll();
       ban.append(h("div", { class: "banner" }, h("p", null, connText())));
       return;
     }
-    if (budgets === null) { head.textContent = "Ausgaben werden geladen …"; hideAll(); return; }
+    if (budgets === null) { head.textContent = "Finanzen werden geladen …"; hideAll(); return; }
 
     var list = sortedBudgets();
     var b = resolveBudget();
