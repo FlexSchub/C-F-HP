@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 90, t: ["Die Farben von F und C in der Überschrift funktionieren jetzt auch in der App (in Update 89 hatte ich sie nur auf der Anmeldeseite eingebaut).", "Startseite: Abwechslungsreichere Begrüßungen passend zu Tageszeit und Wochentag, mit Anspielungen auf Putzplan, Essen, Einkauf, Bus!, Tagebuch und Finanzen."] },
     { v: 89, t: ["Überschrift jeder Seite: Das F und das C zeigen jetzt die Farben, die ihr für euch ausgesucht habt."] },
     { v: 88, t: ["Einstellungen → Aussehen: Darstellung wählbar – „System“ (folgt dem Handy), „Hell“ oder „Dunkel“."] },
     { v: 87, t: ["„Mehr“-Menü: Die Zeile steigt jetzt mit einer kleinen Animation hinter der unteren Leiste auf, und eine schmale grüne Linie trennt die beiden Zeilen, solange das Menü offen ist."] },
@@ -2792,11 +2793,29 @@
     body.forEach(function (b) { if (b) card.append(b); });
     return card;
   }
+  /* Begrüßung auf der Startseite: je Tageszeit ein Pool; pro Tag, Tageszeit und Person bleibt sie stabil (kein Flackern beim Neuladen) */
+  var GREET = {
+    morgen: ["Guten Morgen{n}!", "Moin{n}!", "Guten Start in den Tag{n}!", "Guten Morgen{n}! Was steht heute an?", "Guten Morgen{n}! Der Putzplan wartet schon.", "Guten Morgen{n}! Schon was auf der Einkaufsliste?", "Moin{n}! Was gibt’s heute zu essen?", "Guten Morgen{n}! Wie geht’s dir heute?", "Guten Morgen{n}! Schon einen Bus gesehen?", "Moin{n}! Alles im Budget?"],
+    mittag: ["Hallo{n}!", "Hallo{n}! Wie sieht dein Tag aus?", "Hey{n}, schon was geschafft?", "Hallo{n}! Schon einen Bus gesehen?", "Hallo{n}, Einkauf heute?", "Hallo{n}! Der Kalender weiß, was ansteht.", "Na{n}? Alles im Griff?", "Hallo{n}! Was kommt heute auf den Tisch?"],
+    abend: ["Guten Abend{n}!", "Feierabend{n}!", "Schönen Abend{n}!", "Guten Abend{n}! Was gibt’s zu essen?", "Guten Abend{n}! Schon in den Kalender für morgen geschaut?", "Guten Abend{n}! Tagebuch schon geschrieben?", "Guten Abend{n}! Alles erledigt?", "Hallo{n}, Zeit zum Ausruhen!", "Guten Abend{n}! Schon einen Bus gesehen?"],
+    nacht: ["Noch wach{n}?", "Gute Nacht bald{n}!", "Hallo Nachteule{n}!", "Es ist spät{n}. Alles Wichtige ist erledigt?"]
+  };
+  function greetText() {
+    var d = new Date(), hr = d.getHours(), wd = d.getDay();   // 0 = Sonntag
+    var slot = hr >= 22 || hr < 5 ? "nacht" : hr < 11 ? "morgen" : hr < 18 ? "mittag" : "abend";
+    var pool = GREET[slot].slice();
+    if (slot === "mittag" && hr < 14) pool.push("Mahlzeit{n}!");
+    if (wd === 1 && slot === "morgen") pool.push("Guten Wochenstart{n}!", "Neue Woche, neues Glück{n}!");
+    if (wd === 5 && hr >= 14) pool.push("Endlich Freitag{n}!", "Fast Wochenende{n}!");
+    if ((wd === 6 || wd === 0) && slot !== "nacht") pool.push("Schönes Wochenende{n}!", "Schönen " + (wd === 6 ? "Samstag" : "Sonntag") + "{n}!");
+    var seed = todayStr() + slot + (me || ""), hsh = 0;
+    for (var i = 0; i < seed.length; i++) hsh = (hsh * 31 + seed.charCodeAt(i)) >>> 0;
+    return pool[hsh % pool.length].replace("{n}", me ? ", " + me : "");
+  }
   function renderHome() {
     var box = $("homemain");
     box.replaceChildren();
-    var hr = new Date().getHours();
-    $("homehead").textContent = (hr < 11 ? "Guten Morgen" : hr < 18 ? "Hallo" : "Guten Abend") + (me ? ", " + me : "") + "!";
+    $("homehead").textContent = greetText();
     if (dbMissing) { box.append(h("div", { class: "banner" }, h("p", null, connText()))); return; }
     var today = dn(todayStr()), ts = todayStr();
 
