@@ -952,3 +952,7 @@ body.sec-diary { --bg: #faf6f8; --surface: #ffffff; --ink: #2b2230; --muted: #7b
 
 /* Solange „Mehr“ offen ist: grüne Trennlinie zwischen den beiden Zeilen (ohne Layout-Sprung) */
 body.more-open .top .tabs { box-shadow: inset 0 2px 0 var(--accent), 0 -4px 18px rgba(0,0,0,0.08); }
+
+/* F und C in der Überschrift tragen die Farben, die für die jeweilige Person gewählt wurden */
+h1 .amp .hf { color: var(--f); }
+h1 .amp .hc { color: var(--c); }

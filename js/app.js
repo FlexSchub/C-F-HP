@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 89, t: ["Überschrift jeder Seite: Das F und das C zeigen jetzt die Farben, die ihr für euch ausgesucht habt."] },
     { v: 88, t: ["Einstellungen → Aussehen: Darstellung wählbar – „System“ (folgt dem Handy), „Hell“ oder „Dunkel“."] },
     { v: 87, t: ["„Mehr“-Menü: Die Zeile steigt jetzt mit einer kleinen Animation hinter der unteren Leiste auf, und eine schmale grüne Linie trennt die beiden Zeilen, solange das Menü offen ist."] },
     { v: 86, t: ["„Ausgaben“ heißt jetzt „Finanzen“.", "Neue Reihenfolge im „Mehr“-Menü (von links nach rechts): Settings, Bus!, Tagebuch, Einkauf, Finanzen – das Häufigste liegt rechts nah am Daumen."] },
