@@ -934,9 +934,16 @@ body.hasnetbar { padding-top: 34px; }
 .dtbl th, .dtbl td { border: 1px solid var(--line); padding: 5px 7px; text-align: center; white-space: nowrap; }
 .dtbl th { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .dtbl td.l { text-align: left; }
-.dtbl .dh1 { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-.dtbl .dh2 { background: color-mix(in srgb, var(--accent) 48%, transparent); }
-.dtbl .dh3 { background: color-mix(in srgb, var(--accent) 78%, transparent); }
+.dtbl .dh1 { background: color-mix(in srgb, var(--hi, var(--accent)) 25%, transparent); }
+.dtbl .dh2 { background: color-mix(in srgb, var(--hi, var(--accent)) 55%, transparent); }
+.dtbl .dh3 { background: color-mix(in srgb, var(--hi, var(--accent)) 90%, transparent); }
 .dday { border: 0; background: transparent; color: var(--ink); text-decoration: underline; font: inherit; padding: 6px 4px; min-height: 32px; }
 
 .soonbtn { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 40px; padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+
+/* Tagebuch: eigene Farbwelt (Beere/Pflaume wie im ursprünglichen Symptomtagebuch), nur solange der Bereich offen ist */
+body.sec-diary { --bg: #faf6f8; --surface: #ffffff; --ink: #2b2230; --muted: #7b6d82; --line: #e6dce4; --line-strong: #cdbfca; --accent: #7a4b6e; --accent-ink: #ffffff; --hi: #e8a0b4; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.sec-diary { --bg: #1d1720; --surface: #2a2230; --ink: #f1e9f3; --muted: #b3a5ba; --line: #403647; --line-strong: #5a4b63; --accent: #c88bb9; --accent-ink: #ffffff; --hi: #9a4d68; }
+}
+:root[data-theme="dark"] body.sec-diary { --bg: #1d1720; --surface: #2a2230; --ink: #f1e9f3; --muted: #b3a5ba; --line: #403647; --line-strong: #5a4b63; --accent: #c88bb9; --accent-ink: #ffffff; --hi: #9a4d68; }
