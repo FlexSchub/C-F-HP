@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 92, t: ["„Mehr“-Menü: Der Bereich, in dem ihr gerade seid, ist jetzt grün hinterlegt – genauso wie in der unteren Leiste."] },
     { v: 91, t: ["Neue Symbole in den Leisten: Zahnrad für Settings, der Bus von der Seite, eine Liste für den Einkauf und Glitzer-Sterne für den Putzplan.", "Startseite: Unter der Begrüßung steht jetzt ein kurzer Spruch – mal Motivation, mal Weisheit, Witz oder Zitat – statt Fragen."] },
     { v: 90, t: ["Die Farben von F und C in der Überschrift funktionieren jetzt auch in der App (in Update 89 hatte ich sie nur auf der Anmeldeseite eingebaut).", "Startseite: Abwechslungsreichere Begrüßungen passend zu Tageszeit und Wochentag, mit Anspielungen auf Putzplan, Essen, Einkauf, Bus!, Tagebuch und Finanzen."] },
     { v: 89, t: ["Überschrift jeder Seite: Das F und das C zeigen jetzt die Farben, die ihr für euch ausgesucht habt."] },
