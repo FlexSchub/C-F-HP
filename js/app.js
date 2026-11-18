@@ -730,6 +730,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 91, t: ["Neue Symbole in den Leisten: Zahnrad für Settings, der Bus von der Seite, eine Liste für den Einkauf und Glitzer-Sterne für den Putzplan.", "Startseite: Unter der Begrüßung steht jetzt ein kurzer Spruch – mal Motivation, mal Weisheit, Witz oder Zitat – statt Fragen."] },
     { v: 90, t: ["Die Farben von F und C in der Überschrift funktionieren jetzt auch in der App (in Update 89 hatte ich sie nur auf der Anmeldeseite eingebaut).", "Startseite: Abwechslungsreichere Begrüßungen passend zu Tageszeit und Wochentag, mit Anspielungen auf Putzplan, Essen, Einkauf, Bus!, Tagebuch und Finanzen."] },
     { v: 89, t: ["Überschrift jeder Seite: Das F und das C zeigen jetzt die Farben, die ihr für euch ausgesucht habt."] },
     { v: 88, t: ["Einstellungen → Aussehen: Darstellung wählbar – „System“ (folgt dem Handy), „Hell“ oder „Dunkel“."] },
@@ -2793,29 +2794,64 @@
     body.forEach(function (b) { if (b) card.append(b); });
     return card;
   }
-  /* Begrüßung auf der Startseite: je Tageszeit ein Pool; pro Tag, Tageszeit und Person bleibt sie stabil (kein Flackern beim Neuladen) */
+  /* Begrüßung auf der Startseite: oben die Anrede (je Tageszeit), darunter ein Spruch. Beides bleibt pro Tag, Tageszeit und Person
+     stabil (kein Flackern beim Neuladen) und wechselt dann. */
   var GREET = {
-    morgen: ["Guten Morgen{n}!", "Moin{n}!", "Guten Start in den Tag{n}!", "Guten Morgen{n}! Was steht heute an?", "Guten Morgen{n}! Der Putzplan wartet schon.", "Guten Morgen{n}! Schon was auf der Einkaufsliste?", "Moin{n}! Was gibt’s heute zu essen?", "Guten Morgen{n}! Wie geht’s dir heute?", "Guten Morgen{n}! Schon einen Bus gesehen?", "Moin{n}! Alles im Budget?"],
-    mittag: ["Hallo{n}!", "Hallo{n}! Wie sieht dein Tag aus?", "Hey{n}, schon was geschafft?", "Hallo{n}! Schon einen Bus gesehen?", "Hallo{n}, Einkauf heute?", "Hallo{n}! Der Kalender weiß, was ansteht.", "Na{n}? Alles im Griff?", "Hallo{n}! Was kommt heute auf den Tisch?"],
-    abend: ["Guten Abend{n}!", "Feierabend{n}!", "Schönen Abend{n}!", "Guten Abend{n}! Was gibt’s zu essen?", "Guten Abend{n}! Schon in den Kalender für morgen geschaut?", "Guten Abend{n}! Tagebuch schon geschrieben?", "Guten Abend{n}! Alles erledigt?", "Hallo{n}, Zeit zum Ausruhen!", "Guten Abend{n}! Schon einen Bus gesehen?"],
-    nacht: ["Noch wach{n}?", "Gute Nacht bald{n}!", "Hallo Nachteule{n}!", "Es ist spät{n}. Alles Wichtige ist erledigt?"]
+    morgen: ["Guten Morgen{n}!", "Moin{n}!", "Guten Start in den Tag{n}!"],
+    mittag: ["Hallo{n}!", "Hey{n}!", "Schönen Tag{n}!"],
+    abend: ["Guten Abend{n}!", "Feierabend{n}!", "Schönen Abend{n}!"],
+    nacht: ["Gute Nacht bald{n}!", "Hallo Nachteule{n}!", "Schlaf gut bald{n}!"]
   };
-  function greetText() {
-    var d = new Date(), hr = d.getHours(), wd = d.getDay();   // 0 = Sonntag
-    var slot = hr >= 22 || hr < 5 ? "nacht" : hr < 11 ? "morgen" : hr < 18 ? "mittag" : "abend";
-    var pool = GREET[slot].slice();
-    if (slot === "mittag" && hr < 14) pool.push("Mahlzeit{n}!");
-    if (wd === 1 && slot === "morgen") pool.push("Guten Wochenstart{n}!", "Neue Woche, neues Glück{n}!");
-    if (wd === 5 && hr >= 14) pool.push("Endlich Freitag{n}!", "Fast Wochenende{n}!");
-    if ((wd === 6 || wd === 0) && slot !== "nacht") pool.push("Schönes Wochenende{n}!", "Schönen " + (wd === 6 ? "Samstag" : "Sonntag") + "{n}!");
-    var seed = todayStr() + slot + (me || ""), hsh = 0;
+  var SAYINGS = [
+    // Motivation
+    "Kleine Schritte zählen.", "Ein Ding nach dem anderen.", "Heute reicht dein Bestes.", "Gut ist gut genug.", "Anfangen ist der schwerste Teil, danach läuft es.",
+    "Fünf Minuten reichen oft, um loszulegen.", "Ihr seid ein gutes Team.", "Du hast schon mehr geschafft, als du denkst.", "Pausen gehören dazu.",
+    "Nicht perfekt, sondern erledigt.", "Jeder Haken ist ein kleiner Sieg.", "Heute ist ein guter Tag für einen kleinen Anfang.", "Zusammen ist es nur halb so viel.",
+    // Weisheiten
+    "Geteilte Last ist halbe Last.", "Ordnung ist das halbe Leben.", "Übung macht den Meister.", "Gut Ding will Weile haben.", "Wer will, findet Wege; wer nicht will, findet Gründe.",
+    "Was du heute kannst besorgen, das verschiebe nicht auf morgen.", "Ohne Fleiß kein Preis.", "Steter Tropfen höhlt den Stein.", "Aller Anfang ist schwer, aber auch spannend.",
+    // Witze
+    "Was ist grün und klopft an die Tür? – Ein Klopfsalat.", "Wie nennt man einen Bumerang, der nicht zurückkommt? – Stock.",
+    "Was sagt der große Stift zum kleinen Stift? – „Wachs-mal-stift!“", "Warum können Geister so schlecht lügen? – Man sieht durch sie hindurch.",
+    "Was macht ein Pirat am Computer? – Er drückt die Enter-Taste.", "Staub ist auch nur ein Haustier, das man nicht füttern muss.",
+    "Die Spülmaschine ausräumen ist das Sudoku des Alltags.", "Einkaufen ohne Liste ist ein Abenteuer für Mutige.", "Aufgeschoben ist nicht aufgehoben, nur gut abgehangen.",
+    // Zitate
+    "„Eine Reise von tausend Meilen beginnt mit dem ersten Schritt.“ – Laozi", "„Es gibt nichts Gutes, außer man tut es.“ – Erich Kästner",
+    "„Nicht weil es schwer ist, wagen wir es nicht, sondern weil wir es nicht wagen, ist es schwer.“ – Seneca",
+    "„Mitten im Winter habe ich gelernt, dass in mir ein unbesiegbarer Sommer liegt.“ – Albert Camus", "„Wer nicht neugierig ist, erfährt nichts.“ – Johann Wolfgang von Goethe",
+    "„Das habe ich noch nie vorher versucht, also bin ich völlig sicher, dass ich es kann.“ – Pippi Langstrumpf", "„Ein Leben ohne Mops ist möglich, aber sinnlos.“ – Loriot",
+    "„Man sieht nur mit dem Herzen gut.“ – Antoine de Saint-Exupéry"
+  ];
+  var SAY_MORNING = ["Morgenstund hat Gold im Mund.", "Der frühe Vogel fängt den Wurm.", "Ein guter Start ist schon der halbe Tag."];
+  var SAY_EVENING = ["Nach getaner Arbeit ist gut ruhn.", "Ende gut, alles gut.", "Der Tag war gut genug. Jetzt ausruhen.", "Heute reicht es. Morgen ist auch noch ein Tag."];
+  function seedPick(arr, seed) {
+    var hsh = 0;
     for (var i = 0; i < seed.length; i++) hsh = (hsh * 31 + seed.charCodeAt(i)) >>> 0;
-    return pool[hsh % pool.length].replace("{n}", me ? ", " + me : "");
+    return arr[hsh % arr.length];
+  }
+  function dayParts() {
+    var d = new Date(), hr = d.getHours();
+    return { d: d, hr: hr, wd: d.getDay(), slot: hr >= 22 || hr < 5 ? "nacht" : hr < 11 ? "morgen" : hr < 18 ? "mittag" : "abend" };
+  }
+  function greetText() {
+    var t = dayParts(), pool = GREET[t.slot].slice();
+    if (t.slot === "mittag" && t.hr < 14) pool.push("Mahlzeit{n}!");
+    if (t.wd === 1 && t.slot === "morgen") pool.push("Guten Wochenstart{n}!", "Neue Woche, neues Glück{n}!");
+    if (t.wd === 5 && t.hr >= 14) pool.push("Endlich Freitag{n}!", "Fast Wochenende{n}!");
+    if ((t.wd === 6 || t.wd === 0) && t.slot !== "nacht") pool.push("Schönes Wochenende{n}!", "Schönen " + (t.wd === 6 ? "Samstag" : "Sonntag") + "{n}!");
+    return seedPick(pool, todayStr() + t.slot + (me || "")).replace("{n}", me ? ", " + me : "");
+  }
+  function sayingText() {
+    var t = dayParts(), pool = SAYINGS.slice();
+    if (t.slot === "morgen") pool = pool.concat(SAY_MORNING, SAY_MORNING);
+    if (t.slot === "abend") pool = pool.concat(SAY_EVENING, SAY_EVENING);
+    return seedPick(pool, "s" + todayStr() + t.slot + (me || ""));
   }
   function renderHome() {
     var box = $("homemain");
     box.replaceChildren();
     $("homehead").textContent = greetText();
+    $("homesaying").textContent = dbMissing ? "" : sayingText();
     if (dbMissing) { box.append(h("div", { class: "banner" }, h("p", null, connText()))); return; }
     var today = dn(todayStr()), ts = todayStr();
 
