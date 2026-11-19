@@ -796,6 +796,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 98, t: ["Neuer Look: Oben in jedem Bereich sitzt jetzt ein Wellenband (im Tagebuch in Beere). Der Titel steht darauf."] },
     { v: 97, t: ["Zahlen zählen und Balken füllen sich jetzt etwas langsamer."] },
     { v: 96, t: ["Karten auf der Startseite sinken beim Drücken leicht ein."] },
     { v: 95, t: ["Kleine Animationen: Seiten blenden sanft ein, Fortschrittsbalken füllen sich, Zahlen zählen hoch, abgehakte Einkaufsartikel werden durchgestrichen und rutschen nach unten, neue Artikel gleiten ein, gelöschte klappen zu, Tagebuch-Auswahl „poppt“, der Bus rollt herein. Alles dezent und aus, wenn am Gerät „Bewegung reduzieren“ eingestellt ist."] },

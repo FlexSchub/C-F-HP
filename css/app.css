@@ -1000,3 +1000,19 @@ body.opening .dtbl tr { animation: rowin .3s ease-out both; animation-delay: cal
 .hcard, .day { transition: transform .12s ease-out, box-shadow .12s ease-out; }
 .hcard:active, .day:active { transform: scale(.985); box-shadow: 0 1px 2px rgba(27, 43, 40, .08); }
 @media (prefers-reduced-motion: reduce) { .hcard, .day { transition: none; } .hcard:active, .day:active { transform: none; } }
+
+/* Update 98: Wellenband im Kopf */
+:root { --band1: #1f7a6b; --band2: #155e52; --bandink: #ffffff; --bandpill: rgba(255,255,255,.92); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --band1: #1d5f55; --band2: #123f39; --bandpill: rgba(0,0,0,.3); } }
+:root[data-theme="dark"] { --band1: #1d5f55; --band2: #123f39; --bandpill: rgba(0,0,0,.3); }
+body.sec-diary { --band1: #8c5a80; --band2: #6a3f60; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body.sec-diary { --band1: #5a3a55; --band2: #3d2638; } }
+:root[data-theme="dark"] body.sec-diary { --band1: #5a3a55; --band2: #3d2638; }
+body { position: relative; }
+body:has(#appview:not([hidden]))::before, body:has(#appview:not([hidden]))::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 156px; z-index: -1; pointer-events: none; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+body:has(#appview:not([hidden]))::before { background: var(--band1); -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200' preserveAspectRatio='none'><path d='M0 0H320V110C260 150 220 90 160 120S60 150 0 120Z'/></svg>"); mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200' preserveAspectRatio='none'><path d='M0 0H320V110C260 150 220 90 160 120S60 150 0 120Z'/></svg>"); }
+body:has(#appview:not([hidden]))::after { background: var(--band2); -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200' preserveAspectRatio='none'><path d='M0 0H320V80C250 120 210 60 150 90S50 120 0 90Z'/></svg>"); mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200' preserveAspectRatio='none'><path d='M0 0H320V80C250 120 210 60 150 90S50 120 0 90Z'/></svg>"); }
+.top .brand h1 { color: var(--bandink); }
+.top .brand .date { color: rgba(255,255,255,.88); }
+.top .brand h1 .amp { background: var(--bandpill); border-radius: 999px; padding: 0 .45em; font-size: .8em; vertical-align: .08em; }
+.top { padding-bottom: 22px; }
