@@ -186,6 +186,30 @@
     render();
   }
 
+  /* Kleine Glitzer-Animation beim Abhaken (aus, wenn das Handy „Animationen reduzieren“ eingestellt hat) */
+  var burstFrom = null;
+  function sparkleBurst(el, colors) {
+    try { if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return; } catch (e) {}
+    var r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, made = [];
+    var ring = h("span", { class: "sparkring", "aria-hidden": "true" });
+    ring.style.left = cx + "px"; ring.style.top = cy + "px";
+    document.body.append(ring); made.push(ring);
+    var n = colors.length > 2 ? 11 : 9;
+    for (var i = 0; i < n; i++) {
+      var ang = (i / n) * Math.PI * 2 + Math.random() * 0.5, dist = 28 + Math.random() * 26, size = 7 + Math.random() * 7;
+      var sp = h("span", { class: "spark", "aria-hidden": "true" });
+      sp.style.left = cx + "px"; sp.style.top = cy + "px";
+      sp.style.width = size + "px"; sp.style.height = size + "px"; sp.style.margin = (-size / 2) + "px 0 0 " + (-size / 2) + "px";
+      sp.style.setProperty("--dx", Math.round(Math.cos(ang) * dist) + "px");
+      sp.style.setProperty("--dy", Math.round(Math.sin(ang) * dist - 6) + "px");
+      sp.style.setProperty("--rot", Math.round(-90 + Math.random() * 180) + "deg");
+      sp.style.setProperty("--sc", colors[i % colors.length]);
+      sp.style.animationDelay = Math.round(Math.random() * 90) + "ms";
+      document.body.append(sp); made.push(sp);
+    }
+    setTimeout(function () { made.forEach(function (x) { if (x.parentNode) x.parentNode.removeChild(x); }); }, 1000);
+  }
+
   /* Aktionen */
   function markDone(t, both, who) {
     togetherAsk = null;
@@ -198,6 +222,7 @@
       seg.scrollIntoView({ block: "center", behavior: "smooth" });
       return;
     }
+    if (burstFrom) { sparkleBurst(burstFrom, both ? ["var(--f)", "var(--c)", "#e9b949"] : [by === "C" ? "var(--c)" : by === "F" ? "var(--f)" : "var(--accent)", "#e9b949", "var(--accent)"]); burstFrom = null; }
     var prev = {
       pending: t.pending === true,
       pendingBy: t.pendingBy || "",
@@ -327,7 +352,7 @@
     if (fol.length) metaParts.push("danach: " + fol.join(", "));
     var li = h("li", { class: "task" });
     var check = h("button", { class: "check", type: "button", "aria-label": "Erledigt: " + t.name, onclick: function () {
-      markDone(t);
+      burstFrom = check; markDone(t); burstFrom = null;
     } });
     check.innerHTML = CHECK;
     var title = h("button", { class: "title", type: "button", "aria-expanded": isOpen ? "true" : "false", onclick: function () {
@@ -339,7 +364,7 @@
       h("div", { class: "body" }, title, h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
       h("div", { class: "side" },
         h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who),
-        h("button", { class: "tog", type: "button", title: "Zusammen erledigt (beide bekommen die Punkte)", "aria-label": "Zusammen erledigt: " + t.name, onclick: function () { markDone(t, true); } }, "👥"))
+        h("button", { class: "tog", type: "button", title: "Zusammen erledigt (beide bekommen die Punkte)", "aria-label": "Zusammen erledigt: " + t.name, onclick: function (ev) { burstFrom = ev.currentTarget; markDone(t, true); burstFrom = null; } }, "👥"))
     );
     if (isOpen) {
       var last = t.lastDone ? "Zuletzt erledigt von " + (t.lastBy || "?") + " am " + fmt(t.lastDone) + "." : "Noch nie erledigt.";
@@ -679,6 +704,47 @@
   var alsoSel = {}, alsoFor = null;
   var aisleSort = lsGet("pp-aisle") !== "off";
 
+  /* Kleine Animationen (dezent, bei „Bewegung reduzieren“ aus) */
+  function reducedMotion() { try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { return false; } }
+  var openTimer = null;
+  function openFx() {
+    if (reducedMotion()) return;
+    document.body.classList.add("opening");
+    clearTimeout(openTimer);
+    openTimer = setTimeout(function () { document.body.classList.remove("opening"); }, 1000);
+  }
+  function countUp(root) {
+    if (reducedMotion() || !root) return;
+    Array.prototype.forEach.call(root.querySelectorAll(".num"), function (el) {
+      if (el.children.length) return;
+      var txt = el.textContent, m = /^(\D*?)(\d[\d.]*(?:,\d+)?)(\D*)$/.exec(txt);
+      if (!m) return;
+      var dec = (m[2].split(",")[1] || "").length, target = parseFloat(m[2].replace(/\./g, "").replace(",", "."));
+      if (!isFinite(target) || target <= 0) return;
+      var t0 = null, dur = 650;
+      function step(ts) {
+        if (t0 === null) t0 = ts;
+        var k = Math.min(1, (ts - t0) / dur);
+        if (k >= 1 || !el.isConnected) { if (el.isConnected) el.textContent = txt; return; }
+        var v = target * (1 - Math.pow(1 - k, 3));
+        el.textContent = m[1] + v.toLocaleString("de-DE", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + m[3];
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  }
+  /* Löschen-Kreuz in Listen: Zeile klappt zu, bis die Liste neu aufgebaut wird */
+  document.addEventListener("click", function (e) {
+    var x = e.target.closest && e.target.closest("button.x");
+    if (!x || x.getAttribute("data-go") || reducedMotion()) return;
+    var li = x.closest("li");
+    if (!li) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    li.classList.add("leaving");
+    setTimeout(function () { x.setAttribute("data-go", "1"); x.click(); x.removeAttribute("data-go"); li.classList.remove("leaving"); }, 220);
+  }, true);
+  var shopSeen = null, shopJustDone = {};
+
   /* Einkauf: Aktionen */
   function setDone(it, done) {
     if (!db) return;
@@ -730,6 +796,10 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 96, t: ["Karten auf der Startseite sinken beim Drücken leicht ein."] },
+    { v: 95, t: ["Kleine Animationen: Seiten blenden sanft ein, Fortschrittsbalken füllen sich, Zahlen zählen hoch, abgehakte Einkaufsartikel werden durchgestrichen und rutschen nach unten, neue Artikel gleiten ein, gelöschte klappen zu, Tagebuch-Auswahl „poppt“, der Bus rollt herein. Alles dezent und aus, wenn am Gerät „Bewegung reduzieren“ eingestellt ist."] },
+    { v: 94, t: ["Putzplan: Beim Abhaken glitzert es kurz (in der Farbe der Person, bei „zusammen“ in beiden Farben). Bei eingestellter „Animationen reduzieren“ bleibt es aus."] },
+    { v: 93, t: ["Das Zahnrad bei „Settings“ hat jetzt 6 statt 8 Zähne."] },
     { v: 92, t: ["„Mehr“-Menü: Der Bereich, in dem ihr gerade seid, ist jetzt grün hinterlegt – genauso wie in der unteren Leiste."] },
     { v: 91, t: ["Neue Symbole in den Leisten: Zahnrad für Settings, der Bus von der Seite, eine Liste für den Einkauf und Glitzer-Sterne für den Putzplan.", "Startseite: Unter der Begrüßung steht jetzt ein kurzer Spruch – mal Motivation, mal Weisheit, Witz oder Zitat – statt Fragen."] },
     { v: 90, t: ["Die Farben von F und C in der Überschrift funktionieren jetzt auch in der App (in Update 89 hatte ich sie nur auf der Anmeldeseite eingebaut).", "Startseite: Abwechslungsreichere Begrüßungen passend zu Tageszeit und Wochentag, mit Anspielungen auf Putzplan, Essen, Einkauf, Bus!, Tagebuch und Finanzen."] },
@@ -950,6 +1020,9 @@
     }
   }
   function renderShop() {
+    var prevSeen = shopSeen, nowSeen = {};
+    (items || []).forEach(function (i) { nowSeen[i.id] = 1; });
+    shopSeen = nowSeen;
     var head = $("shophead"), bar = $("stores"), body = $("shopbody");
     bar.replaceChildren(); body.replaceChildren();
     if (stores === null) { head.textContent = "Einkaufsliste wird geladen …"; $("quickform").hidden = true; $("storeform").hidden = true; return; }
@@ -1060,10 +1133,16 @@
       var sortRow = h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: function () { aisleSort = !aisleSort; lsSet("pp-aisle", aisleSort ? "on" : "off"); renderShop(); } }, aisleSort ? "Sortiert nach Gang im Laden · ändern" : "Sortiert nach Hinzufügen · ändern"));
       body.append(sortRow);
       var mkRow = function (it) {
-        var chk = h("button", { class: "check", type: "button", "aria-label": "Gekauft: " + it.name, onclick: function () { setDone(it, true); maybeAskBudget(it); } });
+        var chk = h("button", { class: "check", type: "button", "aria-label": "Gekauft: " + it.name, onclick: function () {
+          var li = chk.parentNode;
+          if (reducedMotion() || !li || li.classList.contains("ticking")) { setDone(it, true); maybeAskBudget(it); return; }
+          li.classList.add("ticking"); shopJustDone[it.id] = 1;
+          setTimeout(function () { setDone(it, true); maybeAskBudget(it); }, 280);
+          setTimeout(function () { delete shopJustDone[it.id]; }, 2500);
+        } });
         chk.innerHTML = CHECK;
         if (editItemId === it.id) return editItemRow(it, chk);
-        return h("li", null, chk,
+        return h("li", { class: prevSeen && !prevSeen[it.id] ? "glidein" : "" }, chk,
           h("button", { class: "nm nmbtn", type: "button", "aria-label": "Bearbeiten: " + it.name, onclick: function () { editItemId = it.id; renderShop(); } },
             it.qty ? h("b", { class: "qty" }, it.qty + " ") : null, it.name, alsoLabel(it)),
           h("button", { class: "x", type: "button", "aria-label": it.name + " von der Liste entfernen", onclick: function () { delItem(it); } }, "×"));
@@ -1102,7 +1181,7 @@
         });
       } else {
         chips = h("div", { class: "bought" });
-        done.forEach(function (it) { chips.append(h("button", { class: "bchip", type: "button", onclick: function () { setDone(it, false); } }, it.name)); });
+        done.forEach(function (it) { chips.append(h("button", { class: "bchip" + (shopJustDone[it.id] ? " arrive" : ""), type: "button", onclick: function () { setDone(it, false); } }, it.name)); });
       }
       var cleanRow = h("div", { class: "row" });
       if (!done.length) cleanRow = null;
@@ -2777,6 +2856,7 @@
     if (!fromPop) histPush(name);
     section = name; lsSet("pp-section", name);
     syncControls();
+    openFx(); shopSeen = null;
     if (name === "putz") render();
     else if (name === "shop") renderShop();
     else if (name === "meal") renderMeal();
@@ -2785,6 +2865,7 @@
     else if (name === "cook") renderCook();
     else if (name === "bus") busRender();
     else if (name === "diary") diaryRender();
+    var secEl = $(name + "view"); if (secEl) countUp(secEl);
     if (after) after();
     try { window.scrollTo(0, 0); } catch (e) {}
   }
@@ -4104,6 +4185,7 @@
     DFIELDS.forEach(function (f) { head.append(h("th", null, f[1].split(" ")[0])); });
     head.append(h("th", null, "Ausfluss"), h("th", null, "Blutung"));
     t.append(head);
+    var ri = 0;
     keys.forEach(function (k) {
       var e = diary[k], tr = h("tr", null, h("td", { class: "l" }, h("button", { type: "button", class: "dday", onclick: function () { $("ddate").value = k; diaryLoadDay(); try { $("diarymain").scrollIntoView({ block: "start" }); } catch (x) {} } }, diaryFmt(k))));
       DFIELDS.forEach(function (f) {
@@ -4111,6 +4193,7 @@
         tr.append(typeof v === "number" ? h("td", { class: "dh" + v }, String(v)) : h("td", null, "-"));
       });
       tr.append(h("td", { class: "l" }, e.aus || "-"), h("td", { class: "l" }, e.blut || "-"));
+      tr.style.setProperty("--i", String(Math.min(ri++, 14)));
       t.append(tr);
     });
   }
