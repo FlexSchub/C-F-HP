@@ -711,7 +711,7 @@
     if (reducedMotion()) return;
     document.body.classList.add("opening");
     clearTimeout(openTimer);
-    openTimer = setTimeout(function () { document.body.classList.remove("opening"); }, 1000);
+    openTimer = setTimeout(function () { document.body.classList.remove("opening"); }, 1600);
   }
   function countUp(root) {
     if (reducedMotion() || !root) return;
@@ -721,7 +721,7 @@
       if (!m) return;
       var dec = (m[2].split(",")[1] || "").length, target = parseFloat(m[2].replace(/\./g, "").replace(",", "."));
       if (!isFinite(target) || target <= 0) return;
-      var t0 = null, dur = 650;
+      var t0 = null, dur = 1300;
       function step(ts) {
         if (t0 === null) t0 = ts;
         var k = Math.min(1, (ts - t0) / dur);
@@ -796,6 +796,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 97, t: ["Zahlen zählen und Balken füllen sich jetzt etwas langsamer."] },
     { v: 96, t: ["Karten auf der Startseite sinken beim Drücken leicht ein."] },
     { v: 95, t: ["Kleine Animationen: Seiten blenden sanft ein, Fortschrittsbalken füllen sich, Zahlen zählen hoch, abgehakte Einkaufsartikel werden durchgestrichen und rutschen nach unten, neue Artikel gleiten ein, gelöschte klappen zu, Tagebuch-Auswahl „poppt“, der Bus rollt herein. Alles dezent und aus, wenn am Gerät „Bewegung reduzieren“ eingestellt ist."] },
     { v: 94, t: ["Putzplan: Beim Abhaken glitzert es kurz (in der Farbe der Person, bei „zusammen“ in beiden Farben). Bei eingestellter „Animationen reduzieren“ bleibt es aus."] },

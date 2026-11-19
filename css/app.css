@@ -981,7 +981,7 @@ h1 .amp .hc { color: var(--c); }
 @keyframes rowin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes busroll { from { margin-left: -70px; opacity: 0; } to { margin-left: 0; opacity: 1; } }
 #appview > .col:not([hidden]) { animation: secin .2s ease-out; }
-body.opening .pbar span, body.opening .bar span, body.opening .bzfill { transform-origin: left center; animation: barin .65s cubic-bezier(.25,.8,.3,1) both; }
+body.opening .pbar span, body.opening .bar span, body.opening .bzfill { transform-origin: left center; animation: barin 1.3s cubic-bezier(.25,.8,.3,1) both; }
 body.opening .bzbus:not(.wreck) { animation: busroll .7s cubic-bezier(.25,.8,.3,1) both; }
 body.opening .dtbl tr { animation: rowin .3s ease-out both; animation-delay: calc(var(--i, 0) * 35ms); }
 .items li.glidein { animation: glide .25s ease-out; }
