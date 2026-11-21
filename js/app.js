@@ -111,7 +111,7 @@
     if (!o || !o.by || !o.date) return null;
     var n = Math.round(Number(o.pts));
     if (!(n >= 1) || dn(todayStr()) - dn(o.date) >= 7) return null;
-    return { by: o.by === "C" ? "C" : "F", pts: Math.min(n, 10), date: o.date };
+    return { by: o.by === "C" ? "C" : "F", pts: Math.min(n, 10), date: o.date, at: o.at || 0, status: o.status === "accepted" ? "accepted" : "open" };
   }
   /* Spielraum: 10 % der selbst erarbeiteten Punkte der letzten 30 Tage, abzüglich Vergebenem */
   function giftRoom(who) {
@@ -279,6 +279,7 @@
     var offer = offerOf(t);
     var giftNow = !both && offer && by !== offer.by ? offer : null;
     if (t.offer) { next.offer = null; prev.offer = t.offer; }
+    if (t.offerNo) { next.offerNo = null; prev.offerNo = t.offerNo; }
     var ref = db.doc("tasks/" + t.id);
     var whoList = both ? ["F", "C"] : [by];
     var lrefs = whoList.map(function () { return db.collection("log").doc(); });
@@ -384,7 +385,9 @@
     if (fol.length) metaParts.push("danach: " + fol.join(", "));
     var li = h("li", { class: "task" });
     var offer = offerOf(t);
-    var canOffer = !!me && !offer && (t.assignee === "egal" || inf.who === me);
+    var mine = !!me && (t.assignee === "egal" || inf.who === me);
+    var blocked = !!(t.offerNo && t.offerNo.by === me && dn(todayStr()) - dn(t.offerNo.date) < 7);
+    var canOffer = mine && !offer && !blocked;
     var check = h("button", { class: "check", type: "button", "aria-label": "Erledigt: " + t.name, onclick: function () {
       burstFrom = check; markDone(t); burstFrom = null;
     } });
@@ -396,7 +399,9 @@
     li.append(
       check,
       h("div", { class: "body" }, title, h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d)),
-        offer ? h("div", { class: "giftb" }, "🎁 +" + offer.pts + (offer.by === me ? " von dir" : " Bonus von " + offer.by)) : null),
+        offer ? (offer.by !== me && offer.status !== "accepted"
+          ? h("button", { class: "giftb", type: "button", title: "Brief öffnen", onclick: function () { showMail({ k: "offer", t: t, o: offer }); } }, "🎁 +" + offer.pts + " Bonus von " + offer.by + " · Brief öffnen")
+          : h("div", { class: "giftb" }, "🎁 +" + offer.pts + (offer.by === me ? " von dir" : " Bonus von " + offer.by) + (offer.status === "accepted" ? " · angenommen" : " · wartet auf Antwort"))) : null),
       h("div", { class: "side" },
         canOffer ? h("button", { class: "tog gift", type: "button", title: "Bonus-Punkte anbieten", "aria-label": "Bonus-Punkte anbieten: " + t.name, onclick: function () { open[t.id] = true; offerFor = t.id; offerPts = 1; confirmDel = null; render(); } }, "🎁") : null,
         h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who),
@@ -412,6 +417,7 @@
         );
       } else {
         if (offer && offer.by === me) actions.append(h("button", { class: "linkbtn", type: "button", onclick: function () { db.doc("tasks/" + t.id).update({ offer: null }).then(function () { toast("Angebot zurückgezogen."); }).catch(writeFail); } }, "Angebot zurückziehen"));
+        if (blocked && mine && !offer) actions.append(h("span", { class: "hint" }, "Dein letztes Angebot hier wurde abgelehnt. Versuch es bei einer anderen Aufgabe."));
         if (canOffer && offerFor !== t.id) actions.append(h("button", { class: "linkbtn", type: "button", onclick: function () { offerFor = t.id; offerPts = 1; render(); } }, "🎁 Bonus-Punkte anbieten"));
         actions.append(
           h("button", { class: "linkbtn", type: "button", onclick: function () { editing[t.id] = !editing[t.id]; render(); } }, editing[t.id] ? "Ändern schließen" : "Name und Rhythmus ändern"),
@@ -420,6 +426,113 @@
       li.append(h("div", { class: "more" }, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", null, last), editing[t.id] ? editForm(t) : null, canOffer && offerFor === t.id ? offerForm(t) : null, actions));
     }
     return li;
+  }
+
+
+  /* Post: Angebote kommen als Brief, Antworten als Karte */
+  var mailOpen = false;
+  function snoozeKey(t, o) { return "pp-snz-" + t.id + "-" + o.at; }
+  function mailNext() {
+    var out = [];
+    (tasks || []).forEach(function (t) {
+      var o = offerOf(t);
+      if (o && me && o.by !== me && o.status !== "accepted" && lsGet(snoozeKey(t, o)) !== todayStr()) out.push({ k: "offer", t: t, o: o });
+      if (t.reply && me && t.reply.to === me) out.push({ k: "reply", t: t, r: t.reply });
+    });
+    return out[0] || null;
+  }
+  function checkMail() {
+    if (mailOpen || !me || tasks === null || document.getElementById("newsbox")) return;
+    if ($("appview").hidden) return;
+    var m = mailNext();
+    if (m) showMail(m);
+  }
+  function showMail(m) {
+    if (mailOpen) return;
+    mailOpen = true;
+    var reduce = reducedMotion();
+    var ov = h("div", { class: "mailov", role: "dialog", "aria-modal": "true", "aria-label": m.k === "offer" ? "Brief mit einem Angebot" : "Antwort auf dein Angebot" });
+    var stage = h("div", { class: "mailstage" });
+    var sc = Math.min(1, (window.innerHeight - 24) / 560, (window.innerWidth - 24) / 330);
+    stage.style.setProperty("--s", String(Math.max(0.5, sc)));
+    var other = me === "F" ? "C" : "F";
+    function close(after) {
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+      document.removeEventListener("keydown", onKey);
+      mailOpen = false;
+      if (after) after();
+      setTimeout(checkMail, 400);
+    }
+    var letter;
+    if (m.k === "offer") {
+      var o = m.o, t = m.t, total = pointsOf(t) + o.pts;
+      var cur = function () { var c = (tasks || []).filter(function (x) { return x.id === t.id; })[0]; var co = c ? offerOf(c) : null; return co && co.at === o.at ? co : null; };
+      var answer = function (kind) {
+        if (!db) { toast("Keine Verbindung zum Speicher."); return; }
+        var co = cur();
+        if (!co) { toast("Das Angebot gibt es nicht mehr."); close(); return; }
+        var reply = { to: o.by, kind: kind, task: t.name, pts: o.pts, at: Date.now() };
+        var patch = kind === "accepted"
+          ? { offer: { by: o.by, pts: o.pts, date: o.date, at: o.at, status: "accepted" }, reply: reply }
+          : { offer: null, reply: reply, offerNo: { by: o.by, date: todayStr() } };
+        db.doc("tasks/" + t.id).update(patch).then(function () {
+          toast(kind === "accepted" ? "Angenommen: " + total + " Punkte, sobald du „" + t.name + "“ erledigst." : "Abgelehnt. " + o.by + " bekommt die Punkte zurück.");
+        }).catch(writeFail);
+        close();
+      };
+      var yes = h("button", { class: "yes", type: "button", onclick: function () { answer("accepted"); } }, "Annehmen");
+      var no = h("button", { class: "no", type: "button", onclick: function () { answer("declined"); } }, "Ablehnen");
+      var later = h("button", { class: "later", type: "button", onclick: function () { lsSet(snoozeKey(t, o), todayStr()); close(); } }, "Später entscheiden");
+      letter = h("div", { class: "mletter" },
+        h("div", { class: "mseal", "aria-hidden": "true" }, "🎁"),
+        h("div", { class: "mto" }, "Für " + me),
+        h("h3", null, "Ein Angebot von " + o.by),
+        h("p", null, o.by + " möchte „" + t.name + "“ nicht übernehmen und legt etwas dazu, wenn du es machst:"),
+        h("div", { class: "mpts" }, "Du bekommst ", h("b", null, pointsOf(t) + " + " + o.pts + " = " + total + " Punkte"), "Bonus " + o.pts + (o.pts === 1 ? " Punkt" : " Punkte") + ", gilt bis " + fmt(dnToStr(dn(o.date) + 6)) ),
+        h("div", { class: "mbtns" }, yes, no, later));
+      var env = h("div", { class: "menv", role: "button", tabindex: "0", "aria-label": "Umschlag öffnen" },
+        h("div", { class: "mback" }), letter,
+        h("div", { class: "mfront" }, h("span", { class: "rib v" }), h("span", { class: "rib h" })),
+        h("div", { class: "mflap" }),
+        h("div", { class: "mbow" }, h("span", { class: "tail l" }), h("span", { class: "tail r" }), h("i"), h("i"), h("b")),
+        h("div", { class: "mlabel" }, "Für " + me + " ✉"));
+      var hint = h("div", { class: "mhint" }, "Du hast Post!", h("small", null, "Tippe auf den Umschlag"));
+      var opened = false;
+      var openIt = function () {
+        if (opened) return; opened = true;
+        ov.classList.add("go");
+        setTimeout(function () { ov.classList.add("done"); yes.focus(); }, reduce ? 0 : 1900);
+      };
+      env.addEventListener("click", openIt);
+      env.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openIt(); } });
+      stage.append(hint, env);
+      ov.append(stage);
+      document.body.append(ov);
+      if (reduce) { ov.classList.add("quick"); openIt(); } else env.focus();
+    } else {
+      var r = m.r, ok = r.kind === "accepted";
+      var okb = h("button", { class: "yes", type: "button", onclick: function () {
+        if (db) db.doc("tasks/" + m.t.id).update({ reply: null }).catch(writeFail);
+        close();
+      } }, "OK");
+      letter = h("div", { class: "mletter reply" },
+        h("div", { class: "mseal", "aria-hidden": "true" }, "✉️"),
+        h("div", { class: "mto" }, "Für " + me),
+        h("h3", null, "Antwort von " + other),
+        h("p", null, ok
+          ? other + " hat dein Angebot für „" + (r.task || m.t.name) + "“ angenommen. 🎉 Die " + r.pts + " Bonus-Punkte werden dir abgezogen, sobald " + other + " die Aufgabe erledigt."
+          : other + " hat dein Angebot für „" + (r.task || m.t.name) + "“ abgelehnt. Deine " + r.pts + " Punkte sind wieder frei."),
+        h("div", { class: "mbtns" }, okb));
+      stage.append(letter); ov.append(stage); ov.classList.add("go", "done", "quick");
+      document.body.append(ov); okb.focus();
+    }
+    function onKey(e) {
+      if (e.key === "Escape" && ov.classList.contains("done")) {
+        if (m.k === "offer") lsSet(snoozeKey(m.t, m.o), todayStr());
+        close();
+      }
+    }
+    document.addEventListener("keydown", onKey);
   }
 
   function offerForm(t) {
@@ -871,6 +984,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 101, t: ["Angebote aus der Tauschbörse kommen jetzt als Brief: Umschlag mit roter Schleife antippen, Brief lesen, annehmen, ablehnen oder auf später verschieben. Der Anbieter bekommt eine Antwort."] },
     { v: 100, t: ["Neu: Tauschbörse im Putzplan. Mit dem 🎁 kannst du bei einer eigenen Aufgabe Bonus-Punkte für den anderen anbieten: höchstens 10 % deiner selbst erarbeiteten Punkte der letzten 30 Tage, höchstens 10 pro Aufgabe. Das Angebot gilt 7 Tage. In der Statistik steht, wer wie viel verschenkt hat."] },
     { v: 99, t: ["Der Balken im Putzplan zeigt jetzt die Punkte der letzten 30 Tage. Die Gesamtpunkte stehen weiter in der Statistik."] },
     { v: 98, t: ["Neuer Look: Oben in jedem Bereich sitzt jetzt ein Wellenband (im Tagebuch in Beere). Der Titel steht darauf."] },
@@ -942,7 +1056,7 @@
     if ((seen === cur && !force) || document.getElementById("newsbox")) return;
     var list = force ? CHANGELOG.slice(0, 5) : CHANGELOG.filter(function (c) { return isNaN(seen) ? c.v === cur : c.v > seen; });
     if (!list.length) { lsSet("pp-seenver", String(cur)); return; }
-    var close = function () { lsSet("pp-seenver", String(cur)); var m = document.getElementById("newsbox"); if (m) m.remove(); document.removeEventListener("keydown", onKey); };
+    var close = function () { lsSet("pp-seenver", String(cur)); var m = document.getElementById("newsbox"); if (m) m.remove(); document.removeEventListener("keydown", onKey); setTimeout(checkMail, 400); };
     var onKey = function (e) { if (e.key === "Escape") close(); };
     var dlg = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "newsbox-t" }, h("h2", { id: "newsbox-t" }, "Was ist neu?"));
     list.forEach(function (c) {
@@ -3765,7 +3879,7 @@
   $("me").addEventListener("click", function (e) {
     var v = e.target.getAttribute && e.target.getAttribute("data-v");
     if (!v) return;
-    me = v; lsSet("pp-me", v); offerFor = null; syncControls(); render();
+    me = v; lsSet("pp-me", v); offerFor = null; syncControls(); render(); checkMail();
   });
   $("filter").addEventListener("click", function (e) {
     var v = e.target.getAttribute && e.target.getAttribute("data-v");
@@ -4351,7 +4465,7 @@
   function startData(store) {
     db = store;
     setupNetBar(store);
-    listen("tasks", function (a) { tasks = a; render(); });
+    listen("tasks", function (a) { tasks = a; render(); checkMail(); });
     listen("log", function (a) { logs = a; renderSummary(); renderStats(); });
     listen("stores", function (a) { stores = a; renderShop(); });
     listen("shop", function (a) { items = a; renderShop(); });
