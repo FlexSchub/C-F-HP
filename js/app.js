@@ -98,6 +98,33 @@
   }
   /* Punkte: jede Aufgabe zählt 1 Punkt, wenn nichts anderes eingestellt ist */
   function pointsOf(x) { var n = Math.round(Number(x && x.points)); return n >= 1 ? Math.min(n, 10) : 1; }
+  /* Tauschbörse: Bonus-Punkte, die eine Person für eine Aufgabe dazulegt */
+  function giftOf(l) { var n = Math.round(Number(l && l.gift && l.gift.pts)); return n >= 1 ? Math.min(n, 10) : 0; }
+  function ptsNet(l, who) {
+    var p = 0;
+    if (l.by === who) p += pointsOf(l) + giftOf(l);
+    if (l.gift && l.gift.from === who && l.by !== who) p -= giftOf(l);
+    return p;
+  }
+  function offerOf(t) {
+    var o = t && t.offer;
+    if (!o || !o.by || !o.date) return null;
+    var n = Math.round(Number(o.pts));
+    if (!(n >= 1) || dn(todayStr()) - dn(o.date) >= 7) return null;
+    return { by: o.by === "C" ? "C" : "F", pts: Math.min(n, 10), date: o.date };
+  }
+  /* Spielraum: 10 % der selbst erarbeiteten Punkte der letzten 30 Tage, abzüglich Vergebenem */
+  function giftRoom(who) {
+    var t30 = dn(todayStr()) - 29, base = 0, bound = 0;
+    (logs || []).forEach(function (l) {
+      if (!l.date) return;
+      if (l.by === who && dn(l.date) >= t30) base += pointsOf(l);
+      if (l.gift && l.gift.from === who && l.gift.offerDate && dn(l.gift.offerDate) >= t30) bound += giftOf(l);
+    });
+    (tasks || []).forEach(function (t) { var o = offerOf(t); if (o && o.by === who) bound += o.pts; });
+    var limit = Math.floor(base * 0.1);
+    return { base: base, limit: limit, bound: bound, free: Math.max(0, Math.min(10, limit - bound)) };
+  }
   function readPoints(el) {
     var n = Number(String(el.value).replace(",", "."));
     return isFinite(n) && n >= 1 && n <= 10 && Math.floor(n) === n ? n : null;
@@ -188,6 +215,7 @@
 
   /* Kleine Glitzer-Animation beim Abhaken (aus, wenn das Handy „Animationen reduzieren“ eingestellt hat) */
   var burstFrom = null;
+  var offerFor = null, offerPts = 1;
   function sparkleBurst(el, colors) {
     try { if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return; } catch (e) {}
     var r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, made = [];
@@ -248,12 +276,16 @@
       turn: t.assignee === "abwechselnd" ? (by === "F" ? "C" : "F") : ""
     };
     var demand = isDemand(t);
+    var offer = offerOf(t);
+    var giftNow = !both && offer && by !== offer.by ? offer : null;
+    if (t.offer) { next.offer = null; prev.offer = t.offer; }
     var ref = db.doc("tasks/" + t.id);
     var whoList = both ? ["F", "C"] : [by];
     var lrefs = whoList.map(function () { return db.collection("log").doc(); });
     var entries = whoList.map(function (w) {
       var en = { taskId: t.id, task: t.name, room: t.room || "Überall", by: w, date: todayStr(), at: Date.now(), points: pointsOf(t) };
       if (both) en.together = true;
+      if (giftNow) en.gift = { from: giftNow.by, pts: giftNow.pts, offerDate: giftNow.date };
       return en;
     });
     var fol = (Array.isArray(t.follow) ? t.follow : []).map(function (id) { return (tasks || []).filter(function (y) { return y.id === id; })[0]; }).filter(function (x) { return x && x.id !== t.id; });
@@ -261,7 +293,7 @@
     var folWrites = fol.map(function (x) { return db.doc("tasks/" + x.id).update({ pending: true, pendingBy: t.name }); });
     Promise.all([ref.update(next)].concat(lrefs.map(function (lr, i) { return lr.set(entries[i]); }), folWrites)).then(function () {
       var days = Number(t.intervalDays) || 7;
-      toast("„" + t.name + "“ erledigt" + (both ? " (zusammen, beide bekommen " + pointsOf(t) + (pointsOf(t) === 1 ? " Punkt" : " Punkte") + ")." : ".") + (fol.length ? " Jetzt fällig: " + fol.map(function (x) { return x.name; }).join(", ") + "." : "") + (demand ? "" : " Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + "."), "Rückgängig", function () {
+      toast("„" + t.name + "“ erledigt" + (both ? " (zusammen, beide bekommen " + pointsOf(t) + (pointsOf(t) === 1 ? " Punkt" : " Punkte") + ")." : giftNow ? " " + giftNow.pts + (giftNow.pts === 1 ? " Bonus-Punkt" : " Bonus-Punkte") + " von " + giftNow.by + " gutgeschrieben." : ".") + (fol.length ? " Jetzt fällig: " + fol.map(function (x) { return x.name; }).join(", ") + "." : "") + (demand ? "" : " Wieder dran " + (days === 1 ? "morgen" : "in " + days + " Tagen") + "."), "Rückgängig", function () {
         Promise.all([ref.update(prev)].concat(lrefs.map(function (lr) { return lr.delete(); }), folPrev.map(function (x) { return db.doc("tasks/" + x.id).update({ pending: x.pending, pendingBy: x.pendingBy }); }))).catch(writeFail);
       });
     }).catch(writeFail);
@@ -351,6 +383,8 @@
     var fol = (Array.isArray(t.follow) ? t.follow : []).map(function (id) { var x = (tasks || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ""; }).filter(Boolean);
     if (fol.length) metaParts.push("danach: " + fol.join(", "));
     var li = h("li", { class: "task" });
+    var offer = offerOf(t);
+    var canOffer = !!me && !offer && (t.assignee === "egal" || inf.who === me);
     var check = h("button", { class: "check", type: "button", "aria-label": "Erledigt: " + t.name, onclick: function () {
       burstFrom = check; markDone(t); burstFrom = null;
     } });
@@ -361,8 +395,10 @@
     } }, t.name);
     li.append(
       check,
-      h("div", { class: "body" }, title, h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
+      h("div", { class: "body" }, title, h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d)),
+        offer ? h("div", { class: "giftb" }, "🎁 +" + offer.pts + (offer.by === me ? " von dir" : " Bonus von " + offer.by)) : null),
       h("div", { class: "side" },
+        canOffer ? h("button", { class: "tog gift", type: "button", title: "Bonus-Punkte anbieten", "aria-label": "Bonus-Punkte anbieten: " + t.name, onclick: function () { open[t.id] = true; offerFor = t.id; offerPts = 1; confirmDel = null; render(); } }, "🎁") : null,
         h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who),
         h("button", { class: "tog", type: "button", title: "Zusammen erledigt (beide bekommen die Punkte)", "aria-label": "Zusammen erledigt: " + t.name, onclick: function (ev) { burstFrom = ev.currentTarget; markDone(t, true); burstFrom = null; } }, "👥"))
     );
@@ -375,13 +411,43 @@
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = null; render(); } }, "Abbrechen")
         );
       } else {
+        if (offer && offer.by === me) actions.append(h("button", { class: "linkbtn", type: "button", onclick: function () { db.doc("tasks/" + t.id).update({ offer: null }).then(function () { toast("Angebot zurückgezogen."); }).catch(writeFail); } }, "Angebot zurückziehen"));
+        if (canOffer && offerFor !== t.id) actions.append(h("button", { class: "linkbtn", type: "button", onclick: function () { offerFor = t.id; offerPts = 1; render(); } }, "🎁 Bonus-Punkte anbieten"));
         actions.append(
           h("button", { class: "linkbtn", type: "button", onclick: function () { editing[t.id] = !editing[t.id]; render(); } }, editing[t.id] ? "Ändern schließen" : "Name und Rhythmus ändern"),
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = t.id; render(); } }, "Aufgabe löschen"));
       }
-      li.append(h("div", { class: "more" }, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", null, last), editing[t.id] ? editForm(t) : null, actions));
+      li.append(h("div", { class: "more" }, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", null, last), editing[t.id] ? editForm(t) : null, canOffer && offerFor === t.id ? offerForm(t) : null, actions));
     }
     return li;
+  }
+
+  function offerForm(t) {
+    var gr = giftRoom(me), other = me === "F" ? "C" : "F";
+    var box = h("div", { class: "offerbox" }, h("b", null, "🎁 Bonus-Punkte anbieten"));
+    var close = h("button", { class: "linkbtn", type: "button", onclick: function () { offerFor = null; render(); } }, "Abbrechen");
+    if (gr.free < 1) {
+      box.append(h("p", { class: "hint" }, gr.limit < 1
+        ? "Anbieten geht ab 10 selbst erarbeiteten Punkten in den letzten 30 Tagen. Du hast aktuell " + gr.base + "."
+        : "Dein Spielraum ist ausgeschöpft: " + gr.bound + " von " + gr.limit + " Punkten sind vergeben. Sie werden nach und nach wieder frei."), close);
+      return box;
+    }
+    var n = Math.min(Math.max(1, offerPts), gr.free);
+    var minus = h("button", { class: "stepb", type: "button", "aria-label": "Weniger", disabled: n <= 1, onclick: function () { offerPts = n - 1; render(); } }, "−");
+    var plus = h("button", { class: "stepb", type: "button", "aria-label": "Mehr", disabled: n >= gr.free, onclick: function () { offerPts = n + 1; render(); } }, "+");
+    var go = h("button", { class: "primary", type: "button", onclick: function () {
+      if (!db) { toast("Keine Verbindung zum Speicher."); return; }
+      var fresh = giftRoom(me);
+      if (fresh.free < n) { toast("Dein Spielraum hat sich geändert. Bitte neu wählen."); render(); return; }
+      db.doc("tasks/" + t.id).update({ offer: { by: me, pts: n, date: todayStr(), at: Date.now() } })
+        .then(function () { offerFor = null; toast("Angebot abgegeben: " + n + (n === 1 ? " Punkt" : " Punkte") + " Bonus für " + other + "."); render(); }).catch(writeFail);
+    } }, "Angebot abgeben");
+    box.append(
+      h("p", { class: "hint" }, "Dein Spielraum: noch " + gr.free + " von " + gr.limit + " Punkten (10 % deiner " + gr.base + " selbst erarbeiteten Punkte der letzten 30 Tage)."),
+      h("div", { class: "stepper" }, minus, h("span", { class: "v" }, String(n)), plus),
+      h("p", { class: "sum" }, other + " bekommt " + pointsOf(t) + " + " + n + " = " + (pointsOf(t) + n) + " Punkte · dir werden " + n + " abgezogen, sobald " + other + " die Aufgabe erledigt. Das Angebot gilt 7 Tage."),
+      go, close);
+    return box;
   }
 
   function editForm(t) {
@@ -436,8 +502,9 @@
     var t30 = dn(todayStr()) - 29;
     (logs || []).forEach(function (l) {
       if (!l.date || dn(l.date) < t30) return;
-      if (l.by === "C") cc += pointsOf(l); else cf += pointsOf(l);
+      cf += ptsNet(l, "F"); cc += ptsNet(l, "C");
     });
+    cf = Math.max(0, cf); cc = Math.max(0, cc);
     if (!tasks.length) head.textContent = "Noch keine Aufgaben";
     else if (n === 0) head.textContent = "Heute ist alles erledigt.";
     else head.textContent = n === 1 ? "1 Aufgabe ist heute dran." : n + " Aufgaben sind heute dran.";
@@ -520,12 +587,16 @@
         h("span", null, "Sobald ihr Aufgaben abhakt, seht ihr hier, wer wie viel übernimmt. Die Zählung beginnt mit dem ersten Abhaken.")));
       return;
     }
-    var f = 0, c = 0, rooms = {}, fp = 0, cp = 0;
+    var f = 0, c = 0, rooms = {}, fp = 0, cp = 0, gv = { F: 0, C: 0 }, gt = { F: 0, C: 0 };
     items.forEach(function (l) {
       var r = l.room || "Überall";
       if (!rooms[r]) rooms[r] = { F: 0, C: 0 };
-      if (l.by === "C") { c++; cp += pointsOf(l); rooms[r].C++; } else { f++; fp += pointsOf(l); rooms[r].F++; }
+      if (l.by === "C") { c++; rooms[r].C++; } else { f++; rooms[r].F++; }
+      fp += ptsNet(l, "F"); cp += ptsNet(l, "C");
+      var g = giftOf(l);
+      if (g) { gv[l.gift.from === "C" ? "C" : "F"] += g; gt[l.by === "C" ? "C" : "F"] += g; }
     });
+    fp = Math.max(0, fp); cp = Math.max(0, cp);
     var total = f + c;
     var pf = Math.round(f / total * 100), pc = 100 - pf;
     var fairText = f === c ? "Ihr teilt euch die Arbeit gleichmäßig auf."
@@ -541,7 +612,7 @@
       h("p", { class: "fair" }, fairText)));
 
     var ptotal = fp + cp;
-    var ppf = Math.round(fp / ptotal * 100), ppc = 100 - ppf;
+    var ppf = ptotal ? Math.round(fp / ptotal * 100) : 50, ppc = 100 - ppf;
     var pfair = fp === cp ? "Nach Punkten teilt ihr euch die Arbeit gleichmäßig auf."
       : (fp > cp ? "F" : "C") + " hat " + Math.max(ppf, ppc) + " % der Punkte gesammelt. Schwere Aufgaben zählen mehr.";
     box.append(h("div", { class: "panel" },
@@ -551,7 +622,8 @@
         h("div", { class: "who C" }, h("span", { class: "num" }, String(cp)), h("span", { class: "lbl" }, "C · " + ppc + " %"))),
       h("div", { class: "bar", role: "img", "aria-label": "Punkte: F " + ppf + " Prozent, C " + ppc + " Prozent" },
         h("span", { class: "bf", style: "width:" + ppf + "%" }), h("span", { class: "bc", style: "width:" + ppc + "%" })),
-      h("p", { class: "fair" }, pfair)));
+      h("p", { class: "fair" }, pfair),
+      gv.F + gv.C > 0 ? h("p", { class: "fair giftline" }, "🎁 verschenkt: F " + gv.F + " · C " + gv.C + "   |   bekommen: F " + gt.F + " · C " + gt.C) : null));
 
     /* letzte 8 Wochen, unabhängig vom gewählten Zeitraum */
     var w0 = weekStart(today) - 49;
@@ -605,7 +677,7 @@
             h("button", { class: "linkbtn danger", type: "button", onclick: function () { removeLog(l); } }, "Entfernen"),
             h("button", { class: "linkbtn", type: "button", onclick: function () { confirmLogDel = null; renderStats(); } }, "Behalten"))
         : h("button", { class: "x", type: "button", "aria-label": "Erledigt-Eintrag entfernen: " + (l.task || "Aufgabe"), title: "Aus erledigt entfernen", onclick: function () { confirmLogDel = l.id; renderStats(); } }, "×");
-      ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, (l.task || "Aufgabe") + (pointsOf(l) > 1 ? " · " + pointsOf(l) + " P." : "") + (l.together ? " · zusammen" : "")), h("span", { class: "rd" }, fmt(l.date)), del));
+      ul.append(h("li", null, h("span", { class: "chip " + who }, who), h("span", { class: "rt" }, (l.task || "Aufgabe") + (pointsOf(l) > 1 ? " · " + pointsOf(l) + " P." : "") + (giftOf(l) ? " · 🎁 +" + giftOf(l) + " von " + l.gift.from : "") + (l.together ? " · zusammen" : "")), h("span", { class: "rd" }, fmt(l.date)), del));
     });
     box.append(h("div", { class: "panel" }, h("h2", null, "Zuletzt erledigt"), ul));
     box.append(h("p", { class: "foot" }, "Gezählt wird ab dem ersten Abhaken in dieser Version."));
@@ -799,6 +871,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 100, t: ["Neu: Tauschbörse im Putzplan. Mit dem 🎁 kannst du bei einer eigenen Aufgabe Bonus-Punkte für den anderen anbieten: höchstens 10 % deiner selbst erarbeiteten Punkte der letzten 30 Tage, höchstens 10 pro Aufgabe. Das Angebot gilt 7 Tage. In der Statistik steht, wer wie viel verschenkt hat."] },
     { v: 99, t: ["Der Balken im Putzplan zeigt jetzt die Punkte der letzten 30 Tage. Die Gesamtpunkte stehen weiter in der Statistik."] },
     { v: 98, t: ["Neuer Look: Oben in jedem Bereich sitzt jetzt ein Wellenband (im Tagebuch in Beere). Der Titel steht darauf."] },
     { v: 97, t: ["Zahlen zählen und Balken füllen sich jetzt etwas langsamer."] },
@@ -2970,7 +3043,7 @@
         var tl = h("ul", { class: "soon tasks" });
         due.slice(0, 5).forEach(function (x) {
           tl.append(h("li", null, h("span", { class: "chip " + x.who }, x.who === "egal" ? "F·C" : x.who),
-            h("span", { class: "tn" }, x.t.name), h("span", { class: "td " + (x.d < 0 ? "late" : "today") }, x.d < 0 ? "überfällig" : "heute")));
+            h("span", { class: "tn" }, x.t.name), offerOf(x.t) ? h("span", { class: "giftb" }, "🎁 +" + offerOf(x.t).pts) : null, h("span", { class: "td " + (x.d < 0 ? "late" : "today") }, x.d < 0 ? "überfällig" : "heute")));
         });
         tb.push(tl);
         if (due.length > 5) tb.push(h("p", { class: "foot" }, "und " + (due.length - 5) + " weitere"));
@@ -3692,7 +3765,7 @@
   $("me").addEventListener("click", function (e) {
     var v = e.target.getAttribute && e.target.getAttribute("data-v");
     if (!v) return;
-    me = v; lsSet("pp-me", v); syncControls();
+    me = v; lsSet("pp-me", v); offerFor = null; syncControls(); render();
   });
   $("filter").addEventListener("click", function (e) {
     var v = e.target.getAttribute && e.target.getAttribute("data-v");

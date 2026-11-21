@@ -1016,3 +1016,16 @@ body:has(#appview:not([hidden]))::after { background: var(--band2); -webkit-mask
 .top .brand .date { color: rgba(255,255,255,.88); }
 .top .brand h1 .amp { background: var(--bandpill); border-radius: 999px; padding: 0 .45em; font-size: .8em; vertical-align: .08em; }
 .top { padding-bottom: 22px; }
+
+/* Update 100: Tauschbörse */
+.giftb { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 700; color: #8a6200; background: #fff6dc; border: 1px solid #f0d88a; border-radius: 99px; padding: 2px 10px; }
+:root[data-theme="dark"] .giftb { color: #f0d88a; background: #3a3118; border-color: #5c4d1f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .giftb { color: #f0d88a; background: #3a3118; border-color: #5c4d1f; } }
+.tasks .giftb, .soon .giftb { margin: 0 6px; }
+.offerbox { margin: 10px 0; padding: 12px; border: 1px solid var(--line, #dfe7e5); border-radius: 14px; display: flex; flex-direction: column; gap: 10px; }
+.offerbox .hint, .offerbox .sum { margin: 0; font-size: 13px; }
+.stepper { display: flex; align-items: center; justify-content: center; gap: 18px; }
+.stepper .v { font-size: 32px; font-weight: 700; min-width: 56px; text-align: center; }
+.stepb { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line, #dfe7e5); background: transparent; color: inherit; font-size: 22px; }
+.stepb:disabled { opacity: .35; }
+.giftline { margin-top: 6px; }
