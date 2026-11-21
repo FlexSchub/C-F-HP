@@ -431,9 +431,12 @@
     var head = $("headline");
     if (tasks === null) { head.textContent = "Putzplan wird geladen …"; $("share").hidden = true; return; }
     var n = 0, cf = 0, cc = 0;
-    tasks.forEach(function (t) {
-      if (info(t).d <= 0) n++;
-      cf += t.countF || 0; cc += t.countC || 0;
+    tasks.forEach(function (t) { if (info(t).d <= 0) n++; });
+    /* Balken: nur Punkte der letzten 30 Tage (Gesamtpunkte stehen in der Statistik) */
+    var t30 = dn(todayStr()) - 29;
+    (logs || []).forEach(function (l) {
+      if (!l.date || dn(l.date) < t30) return;
+      if (l.by === "C") cc += pointsOf(l); else cf += pointsOf(l);
     });
     if (!tasks.length) head.textContent = "Noch keine Aufgaben";
     else if (n === 0) head.textContent = "Heute ist alles erledigt.";
@@ -796,6 +799,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 99, t: ["Der Balken im Putzplan zeigt jetzt die Punkte der letzten 30 Tage. Die Gesamtpunkte stehen weiter in der Statistik."] },
     { v: 98, t: ["Neuer Look: Oben in jedem Bereich sitzt jetzt ein Wellenband (im Tagebuch in Beere). Der Titel steht darauf."] },
     { v: 97, t: ["Zahlen zählen und Balken füllen sich jetzt etwas langsamer."] },
     { v: 96, t: ["Karten auf der Startseite sinken beim Drücken leicht ein."] },
@@ -4275,7 +4279,7 @@
     db = store;
     setupNetBar(store);
     listen("tasks", function (a) { tasks = a; render(); });
-    listen("log", function (a) { logs = a; renderStats(); });
+    listen("log", function (a) { logs = a; renderSummary(); renderStats(); });
     listen("stores", function (a) { stores = a; renderShop(); });
     listen("shop", function (a) { items = a; renderShop(); });
     listen("recipes", function (a) { recipes = a; renderCook(); renderMeal(); renderShop(); });
