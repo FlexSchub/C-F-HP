@@ -217,6 +217,19 @@
           }
         };
       },
+      /* Bilder (privater Speicher "advent") */
+      imgList: function (dir) {
+        return sb.storage.from("advent").list(dir, { limit: 100 }).then(function (r) { if (r.error) throw mapError(r.error); return r.data || []; });
+      },
+      imgPut: function (path, blob) {
+        return sb.storage.from("advent").upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" }).then(function (r) { if (r.error) throw mapError(r.error); });
+      },
+      imgGet: function (path) {
+        return sb.storage.from("advent").download(path).then(function (r) { if (r.error) throw mapError(r.error); return r.data; });
+      },
+      imgDel: function (path) {
+        return sb.storage.from("advent").remove([path]).then(function (r) { if (r.error) throw mapError(r.error); });
+      },
       pending: function () { return queue.length; },
       onPending: function (f) { qlisteners.push(f); },
       flush: flushQ,

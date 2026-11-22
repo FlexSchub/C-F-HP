@@ -429,6 +429,226 @@
   }
 
 
+
+  /* Adventskalender */
+  var advHave = {}, advListed = false, advOpen = false, advCache = {}, advSel = 0, advBusy = false;
+  function advYear() { return Number(todayStr().slice(0, 4)); }
+  function advToday() { var t = todayStr(); return { y: Number(t.slice(0, 4)), m: Number(t.slice(5, 7)), d: Number(t.slice(8, 10)) }; }
+  function advActive() { return advToday().m === 12; }
+  function advDayNow() { return Math.min(24, advToday().d); }
+  function advPath(day) { return advYear() + "/" + day + ".jpg"; }
+  function advSeenGet() { try { var a = JSON.parse(lsGet("pp-adv-" + advYear()) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function advSeenAdd(day) { var a = advSeenGet(); if (a.indexOf(day) < 0) { a.push(day); lsSet("pp-adv-" + advYear(), JSON.stringify(a)); } }
+  /* Kerzen: 4 Adventssonntage (der 4. ist der letzte Sonntag bis einschließlich 24.12.) */
+  function advLit() {
+    var dow = new Date(Date.UTC(advYear(), 11, 24)).getUTCDay(), a4 = 24 - dow, n = 0;
+    [a4 - 21, a4 - 14, a4 - 7, a4].forEach(function (d) { if (d <= advToday().d) n++; });
+    return advActive() ? n : 0;
+  }
+  function advRand(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  /* Kranz als SVG (Mitte cx,cy; Radius R) */
+  function advWreath(size, cx, cy, R, n, lw, lh, opt) {
+    opt = opt || {};
+    var svg = svgEl("svg", { viewBox: (opt.vb || "0 0 " + size + " " + size), width: size, height: opt.h || size, "aria-hidden": "true" });
+    var rnd = advRand(7), g = svgEl("g");
+    var cols = ["#2f7d4f", "#256b42", "#3c8f5c", "#1f5a38"], i, a, r, x, y;
+    for (i = 0; i < n; i++) {
+      a = i / n * 2 * Math.PI + (rnd() - .5) * .06; r = R + (rnd() - .5) * 8;
+      x = cx + r * Math.cos(a); y = cy + r * Math.sin(a);
+      var deg = a * 180 / Math.PI + 90 + [-35, -20, 20, 35][Math.floor(rnd() * 4)];
+      g.append(svgEl("ellipse", { cx: x.toFixed(1), cy: y.toFixed(1), rx: lw / 2, ry: lh / 2, fill: cols[Math.floor(rnd() * 4)], transform: "rotate(" + deg.toFixed(0) + " " + x.toFixed(1) + " " + y.toFixed(1) + ")" }));
+    }
+    if (opt.berries !== false) for (i = 0; i < Math.round(n / 6); i++) {
+      a = rnd() * 2 * Math.PI; r = R + (rnd() - .5) * 10;
+      g.append(svgEl("circle", { cx: (cx + r * Math.cos(a)).toFixed(1), cy: (cy + r * Math.sin(a)).toFixed(1), r: Math.max(1.6, lw / 9), fill: "#c8362d" }));
+    }
+    svg.append(g);
+    if (opt.bow) {
+      var k = opt.bow, b = svgEl("g", { transform: "translate(" + cx + " " + (cy - R) + ") scale(" + k + ")" });
+      b.append(svgEl("path", { d: "M0 0 L-26 -14 Q-34 0 -26 14Z", fill: "#c8362d" }), svgEl("path", { d: "M0 0 L26 -14 Q34 0 26 14Z", fill: "#c8362d" }),
+        svgEl("path", { d: "M-4 6 L-16 34 L-6 30 L0 38Z", fill: "#a6271f" }), svgEl("path", { d: "M4 6 L16 34 L6 30 L0 38Z", fill: "#a6271f" }), svgEl("circle", { r: 7, fill: "#a6271f" }));
+      svg.append(b);
+    }
+    if (opt.candles) opt.candles.forEach(function (c) { svg.append(advCandle(c.x, c.y, c.lit, c.k || 1)); });
+    return svg;
+  }
+  function advCandle(x, y, lit, k) {
+    var g = svgEl("g", { transform: "translate(" + x.toFixed(1) + " " + y.toFixed(1) + ") scale(" + k + ")" });
+    g.append(svgEl("rect", { x: -5, y: -28, width: 10, height: 28, rx: 2, fill: "#f6ecd2", stroke: "#c9a064", "stroke-width": "1" }),
+      svgEl("rect", { x: -5, y: -20, width: 10, height: 4, fill: "#c8362d" }), svgEl("circle", { cx: 0, cy: 1, r: 4, fill: "#e9b949" }));
+    if (lit) {
+      var f = svgEl("g", { class: "flame" });
+      f.append(svgEl("ellipse", { cx: 0, cy: -37, rx: 5, ry: 8, fill: "#ffb52e" }), svgEl("ellipse", { cx: 0, cy: -35, rx: 2.6, ry: 5, fill: "#fff1b0" }));
+      g.append(svgEl("circle", { cx: 0, cy: -36, r: 14, fill: "#ffd24a", opacity: ".22" }), f);
+    }
+    return g;
+  }
+  function advImg(day) {
+    if (advCache[day]) return Promise.resolve(advCache[day]);
+    return db.imgGet(advPath(day)).then(function (blob) {
+      return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { advCache[day] = fr.result; res(fr.result); }; fr.onerror = rej; fr.readAsDataURL(blob); });
+    });
+  }
+  function advRefresh() {
+    if (!db || !db.imgList || advToday().m < 11) return Promise.resolve();
+    return db.imgList(String(advYear())).then(function (list) {
+      var have = {};
+      list.forEach(function (f) { var m = /^(\d{1,2})\.jpg$/.exec(f.name || ""); if (m && +m[1] >= 1 && +m[1] <= 24) have[+m[1]] = true; });
+      advHave = have; advListed = true; advSync(); checkPost();
+    }).catch(function () { advListed = false; advSync(); });
+  }
+  function advSync() {
+    var btn = $("advbtn"), act = advActive();
+    btn.hidden = !act;
+    $("advset").hidden = advToday().m < 11;
+    if (act) {
+      btn.textContent = "";
+      var seen = advSeenGet(), dn0 = advDayNow();
+      btn.classList.toggle("unseen", !!advHave[dn0] && seen.indexOf(dn0) < 0);
+      btn.append(advWreath(44, 22, 22, 15, 24, 10, 5, { berries: false }), h("span", null, String(dn0)));
+    }
+  }
+  function checkAdv() {
+    if (advOpen || mailOpen || !advActive() || !advListed || document.getElementById("newsbox") || $("appview").hidden) return;
+    var d = advToday().d;
+    if (d > 24 || !advHave[d] || advSeenGet().indexOf(d) >= 0) return;
+    advShow("day", d);
+  }
+  function checkPost() { checkAdv(); checkMail(); }
+  /* Anzeige */
+  function advClose() {
+    var ov = document.getElementById("advov"); if (ov) ov.remove();
+    document.removeEventListener("keydown", advKey);
+    advOpen = false; advSync();
+    setTimeout(checkPost, 300);
+  }
+  function advKey(e) { if (e.key === "Escape") advClose(); }
+  function advShow(kind, day) {
+    var old = document.getElementById("advov"); if (old) old.remove();
+    advOpen = true;
+    var ov = h("div", { class: "advov", id: "advov", role: "dialog", "aria-modal": "true", "aria-label": "Adventskalender" });
+    var stage = h("div", { class: "advstage" });
+    var sc = Math.min(1, (window.innerHeight - 70) / 700, (window.innerWidth - 20) / 340);
+    stage.style.setProperty("--s", String(Math.max(0.5, sc)));
+    var closeBtn = h("button", { class: "advx", type: "button", "aria-label": "Schließen", onclick: advClose }, "✕");
+    var lit = advLit();
+    stage.append(h("div", { class: "advrope" }));
+    if (kind === "day") {
+      var wrap = h("div", { class: "advwreath" });
+      var cx = 110, cy = 110, R = 84, cs = [-148, -118, -62, -32].map(function (deg, i) {
+        var a = deg * Math.PI / 180; return { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) + 2, lit: i < lit, k: .9 };
+      });
+      wrap.append(advWreath(220, cx, cy, R, 80, 30, 13, { vb: "0 -30 220 250", h: 250, bow: 1.1, candles: cs }));
+      var hang = h("div", { class: "advhang" },
+        h("span", { class: "advstr l" }), h("span", { class: "advstr r" }));
+      var photo = h("div", { class: "advphoto" }, h("span", { class: "advwait" }, "…"));
+      hang.append(h("div", { class: "advframe" }, photo, h("div", { class: "advdate" }, day + ". Dezember")));
+      var more = h("button", { class: "advmore", type: "button", onclick: function () { advShow("all"); } }, "Alle Türen ansehen");
+      stage.append(wrap, hang); ov.dataset.more = "1"; ov.moreBtn = more;
+      advSeenAdd(day);
+      if (!advHave[day]) photo.firstChild.textContent = "Für diese Tür gibt es noch kein Bild. 🎄";
+      else advImg(day).then(function (url) {
+        var im = h("img", { src: url, alt: "Bild für den " + day + ". Dezember" });
+        photo.textContent = ""; photo.append(im);
+      }).catch(function () { photo.firstChild.textContent = "Das Bild konnte nicht geladen werden."; });
+    } else {
+      var wrap2 = h("div", { class: "advwreath big" });
+      wrap2.append(advWreath(340, 170, 170, 134, 110, 34, 15, { bow: 1.25 }));
+      var ring = h("div", { class: "advring" });
+      var seen = advSeenGet(), today = advToday().d;
+      for (var d = 1; d <= 24; d++) (function (d) {
+        var ang = (d - 1) / 24 * 2 * Math.PI - Math.PI / 2;
+        var locked = d > today;
+        var cls = "advtok " + (locked ? "lock" : d === today ? "today" : seen.indexOf(d) >= 0 ? "seen" : "fresh");
+        var t = h("button", { class: cls, type: "button", "aria-label": locked ? d + ". Tür, noch verschlossen" : d + ". Tür öffnen", onclick: function () {
+          if (locked) { toast("Diese Tür öffnet sich am " + d + ". Dezember."); t.classList.add("shake"); setTimeout(function () { t.classList.remove("shake"); }, 450); return; }
+          advShow("day", d);
+        } }, locked ? h("span", null, "🔒", h("b", null, String(d))) : String(d));
+        t.style.left = (170 + 134 * Math.cos(ang) - 22).toFixed(0) + "px"; t.style.top = (170 + 134 * Math.sin(ang) - 22).toFixed(0) + "px";
+        ring.append(t);
+      })(d);
+      var cand = svgEl("svg", { class: "advcand", viewBox: "0 0 160 70", width: 160, height: 70, "aria-hidden": "true" });
+      for (var i = 0; i < 4; i++) cand.append(advCandle(20 + i * 40, 62, i < lit, 1));
+      stage.append(wrap2, ring, h("div", { class: "advcandbox" }, cand));
+      stage.append(h("div", { class: "advtitle" }, "Dein Adventskalender", h("small", null, "Gesehene Türen kannst du jederzeit nochmal öffnen. Die übrigen warten. 🔒")));
+    }
+    ov.append(stage, closeBtn);
+    if (ov.moreBtn) ov.append(ov.moreBtn);
+    document.body.append(ov);
+    document.addEventListener("keydown", advKey);
+    closeBtn.focus();
+  }
+  /* Einstellungen: Upload */
+  function advResize(file) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onerror = function () { rej(new Error("Datei nicht lesbar")); };
+      fr.onload = function () {
+        var im = new Image();
+        im.onerror = function () { rej(new Error("Das ist kein Bild, das ich öffnen kann")); };
+        im.onload = function () {
+          var w = im.naturalWidth, hh = im.naturalHeight, k = Math.min(1, 1000 / Math.max(w, hh));
+          var c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(hh * k));
+          c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+          c.toBlob(function (b) { if (b) res(b); else rej(new Error("Verkleinern hat nicht geklappt")); }, "image/jpeg", 0.82);
+        };
+        im.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+  function advStat(t) { $("advstat").textContent = t || ""; }
+  function advUp(day, file) {
+    return advResize(file).then(function (blob) { return db.imgPut(advPath(day), blob); }).then(function () { advHave[day] = true; delete advCache[day]; });
+  }
+  function advUpErr(ex) {
+    var m = String(ex && ex.message || ex);
+    advStat(/bucket|not found|404/i.test(m) ? "Der Bilderspeicher ist noch nicht eingerichtet. Bitte zuerst das SQL-Update ausführen." : "Hochladen hat nicht geklappt: " + m);
+  }
+  function advRenderSet() {
+    if (advToday().m < 11) return;
+    advRefresh().then(advDrawGrid); advDrawGrid();
+  }
+  function advDrawGrid() {
+    var g = $("advgrid"); g.textContent = "";
+    for (var d = 1; d <= 24; d++) (function (d) {
+      g.append(h("button", { class: "advtile" + (advHave[d] ? " has" : "") + (advSel === d ? " sel" : ""), type: "button", "aria-label": d + ". Tür" + (advHave[d] ? ", Foto vorhanden" : ", noch kein Foto"), onclick: function () { advSel = advSel === d ? 0 : d; advDrawGrid(); } }, String(d), advHave[d] ? h("i", null, "✓") : null));
+    })(d);
+    var pn = $("advpanel"); pn.hidden = !advSel; pn.textContent = "";
+    if (!advSel) return;
+    var day = advSel;
+    pn.append(h("b", null, day + ". Dezember"),
+      h("div", { class: "row" },
+        h("button", { class: "linkbtn", type: "button", onclick: function () { $("advfile").click(); } }, advHave[day] ? "Foto ersetzen" : "Foto wählen"),
+        advHave[day] ? h("button", { class: "linkbtn", type: "button", onclick: function () { advShow("day", day); } }, "Ansehen") : null,
+        advHave[day] ? h("button", { class: "linkbtn danger", type: "button", onclick: function () {
+          db.imgDel(advPath(day)).then(function () { advHave[day] = false; delete advCache[day]; advDrawGrid(); advStat("Foto entfernt."); }).catch(advUpErr);
+        } }, "Entfernen") : null));
+  }
+  function advWire() {
+    $("advbtn").addEventListener("click", function () { advShow("all"); });
+    $("advfile").addEventListener("change", function () {
+      var f = this.files && this.files[0], day = advSel; this.value = "";
+      if (!f || !day || !db) return;
+      advStat("Lade hoch …");
+      advUp(day, f).then(function () { advStat(day + ". Dezember: Foto gespeichert."); advDrawGrid(); advSync(); }).catch(advUpErr);
+    });
+    $("advbulk").addEventListener("click", function () { $("advmulti").click(); });
+    $("advmulti").addEventListener("change", function () {
+      var fs = Array.prototype.slice.call(this.files || [], 0, 24); this.value = "";
+      if (!fs.length || !db || advBusy) return;
+      var free = []; for (var d = 1; d <= 24; d++) if (!advHave[d]) free.push(d);
+      if (!free.length) { advStat("Alle Türen haben schon ein Foto. Tippe eine Tür an, um ein Foto zu ersetzen."); return; }
+      fs = fs.slice(0, free.length); advBusy = true;
+      var i = 0;
+      (function next() {
+        if (i >= fs.length) { advBusy = false; advStat(fs.length + (fs.length === 1 ? " Foto gespeichert." : " Fotos gespeichert.") + " Sie liegen der Reihe nach auf den freien Türen."); advDrawGrid(); advSync(); return; }
+        advStat("Lade hoch: " + (i + 1) + " von " + fs.length + " …");
+        advUp(free[i], fs[i]).then(function () { i++; next(); }).catch(function (ex) { advBusy = false; advUpErr(ex); advDrawGrid(); });
+      })();
+    });
+  }
+
   /* Post: Angebote kommen als Brief, Antworten als Karte */
   var mailOpen = false;
   function snoozeKey(t, o) { return "pp-snz-" + t.id + "-" + o.at; }
@@ -442,7 +662,7 @@
     return out[0] || null;
   }
   function checkMail() {
-    if (mailOpen || !me || tasks === null || document.getElementById("newsbox")) return;
+    if (mailOpen || advOpen || !me || tasks === null || document.getElementById("newsbox")) return;
     if ($("appview").hidden) return;
     var m = mailNext();
     if (m) showMail(m);
@@ -461,7 +681,7 @@
       document.removeEventListener("keydown", onKey);
       mailOpen = false;
       if (after) after();
-      setTimeout(checkMail, 400);
+      setTimeout(checkPost, 400);
     }
     var letter;
     if (m.k === "offer") {
@@ -984,6 +1204,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 102, t: ["Eine kleine Überraschung für den Dezember. 🎄"] },
     { v: 101, t: ["Angebote aus der Tauschbörse kommen jetzt als Brief: Umschlag mit roter Schleife antippen, Brief lesen, annehmen, ablehnen oder auf später verschieben. Der Anbieter bekommt eine Antwort."] },
     { v: 100, t: ["Neu: Tauschbörse im Putzplan. Mit dem 🎁 kannst du bei einer eigenen Aufgabe Bonus-Punkte für den anderen anbieten: höchstens 10 % deiner selbst erarbeiteten Punkte der letzten 30 Tage, höchstens 10 pro Aufgabe. Das Angebot gilt 7 Tage. In der Statistik steht, wer wie viel verschenkt hat."] },
     { v: 99, t: ["Der Balken im Putzplan zeigt jetzt die Punkte der letzten 30 Tage. Die Gesamtpunkte stehen weiter in der Statistik."] },
@@ -1056,7 +1277,7 @@
     if ((seen === cur && !force) || document.getElementById("newsbox")) return;
     var list = force ? CHANGELOG.slice(0, 5) : CHANGELOG.filter(function (c) { return isNaN(seen) ? c.v === cur : c.v > seen; });
     if (!list.length) { lsSet("pp-seenver", String(cur)); return; }
-    var close = function () { lsSet("pp-seenver", String(cur)); var m = document.getElementById("newsbox"); if (m) m.remove(); document.removeEventListener("keydown", onKey); setTimeout(checkMail, 400); };
+    var close = function () { lsSet("pp-seenver", String(cur)); var m = document.getElementById("newsbox"); if (m) m.remove(); document.removeEventListener("keydown", onKey); setTimeout(checkPost, 400); };
     var onKey = function (e) { if (e.key === "Escape") close(); };
     var dlg = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": "newsbox-t" }, h("h2", { id: "newsbox-t" }, "Was ist neu?"));
     list.forEach(function (c) {
@@ -3058,6 +3279,7 @@
     else if (name === "cook") renderCook();
     else if (name === "bus") busRender();
     else if (name === "diary") diaryRender();
+    if (name === "set") advRenderSet();
     var secEl = $(name + "view"); if (secEl) countUp(secEl);
     if (after) after();
     try { window.scrollTo(0, 0); } catch (e) {}
@@ -4466,6 +4688,7 @@
     db = store;
     setupNetBar(store);
     listen("tasks", function (a) { tasks = a; render(); checkMail(); });
+    advWire(); advSync(); advRefresh();
     listen("log", function (a) { logs = a; renderSummary(); renderStats(); });
     listen("stores", function (a) { stores = a; renderShop(); });
     listen("shop", function (a) { items = a; renderShop(); });

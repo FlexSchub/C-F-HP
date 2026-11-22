@@ -9,11 +9,11 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; manifest-src 'self'; font-src 'self'; connect-src https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Putzplan F &amp; C</title>
 <meta name="theme-color" content="#14614F">
-<script src="js/theme.js?v=101"></script>
+<script src="js/theme.js?v=102"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=101">
+<link rel="stylesheet" href="css/app.css?v=102">
 </head>
 <body>
 <p class="note" id="bootmsg">Wird geladen …</p>
@@ -60,6 +60,7 @@
         <h1><span id="h1name">Heute</span> <span class="amp"><span class="hf">F</span> &amp; <span class="hc">C</span></span></h1>
         <span class="date" id="today"></span>
       </div>
+      <button class="advbtn" type="button" id="advbtn" aria-label="Adventskalender öffnen" hidden></button>
     </div>
     <nav class="tabs" id="mainnav" aria-label="Bereiche">
       <button class="tab" type="button" id="tabhome" data-title="Heute" aria-label="Heute"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg></span><span class="lbl">Heute</span></button>
@@ -581,6 +582,17 @@
       <div id="colorbox" class="colorbox"></div>
       </div>
     </details>
+    <details class="setcard group fold" id="advset" hidden><summary><h2>Adventskalender</h2><span class="chev" aria-hidden="true"></span></summary>
+      <div class="setin">
+      <p class="meta">Ein Foto für jede Tür (1 bis 24). Alle sehen dieselben Bilder. Die Fotos werden verkleinert und privat bei euch gespeichert.</p>
+      <div id="advgrid" class="advgrid"></div>
+      <div id="advpanel" class="advpanel" hidden></div>
+      <div class="row"><button class="linkbtn" type="button" id="advbulk">Mehrere Fotos auf einmal wählen</button></div>
+      <input type="file" id="advfile" accept="image/*" hidden>
+      <input type="file" id="advmulti" accept="image/*" multiple hidden>
+      <div id="advstat" class="meta" role="status"></div>
+      </div>
+    </details>
     <details class="setcard group fold"><summary><h2>Daten</h2><span class="chev" aria-hidden="true"></span></summary>
       <div class="setin">
       <div class="row">
@@ -616,9 +628,9 @@
 
 <div class="toast" id="toast" hidden><div class="toast-in"><span id="toasttext"></span><button type="button" id="toastbtn" hidden></button></div></div>
 
-<script src="js/vendor/supabase.js?v=101"></script>
+<script src="js/vendor/supabase.js?v=102"></script>
 <script src="js/config.js"></script>
-<script src="js/store-supabase.js?v=101"></script>
-<script src="js/app.js?v=101"></script>
+<script src="js/store-supabase.js?v=102"></script>
+<script src="js/app.js?v=102"></script>
 </body>
 </html>
