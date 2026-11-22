@@ -228,7 +228,7 @@
         return sb.storage.from("advent").download(path).then(function (r) { if (r.error) throw mapError(r.error); return r.data; });
       },
       imgDel: function (path) {
-        return sb.storage.from("advent").remove([path]).then(function (r) { if (r.error) throw mapError(r.error); });
+        return sb.storage.from("advent").remove(Array.isArray(path) ? path : [path]).then(function (r) { if (r.error) throw mapError(r.error); });
       },
       pending: function () { return queue.length; },
       onPending: function (f) { qlisteners.push(f); },

@@ -431,12 +431,14 @@
 
 
   /* Adventskalender */
-  var advHave = {}, advListed = false, advOpen = false, advCache = {}, advSel = 0, advBusy = false;
+  var advHave = {}, advEditHave = {}, advListed = false, advOpen = false, advCache = {}, advSel = 0, advBusy = false, advEditYear = 0, advWipe = false;
   function advYear() { return Number(todayStr().slice(0, 4)); }
   function advToday() { var t = todayStr(); return { y: Number(t.slice(0, 4)), m: Number(t.slice(5, 7)), d: Number(t.slice(8, 10)) }; }
-  function advActive() { return advToday().m === 12; }
+  function advActive() { return advToday().m === 12 && lsGet("pp-adv-off") !== "1"; }
+  function advEY() { return advEditYear || advYear(); }
+  function advHaveE() { return advEY() === advYear() ? advHave : advEditHave; }
   function advDayNow() { return Math.min(24, advToday().d); }
-  function advPath(day) { return advYear() + "/" + day + ".jpg"; }
+  function advPath(day, y) { return (y || advYear()) + "/" + day + ".jpg"; }
   function advSeenGet() { try { var a = JSON.parse(lsGet("pp-adv-" + advYear()) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
   function advSeenAdd(day) { var a = advSeenGet(); if (a.indexOf(day) < 0) { a.push(day); lsSet("pp-adv-" + advYear(), JSON.stringify(a)); } }
   /* Kerzen: 4 Adventssonntage (der 4. ist der letzte Sonntag bis einschließlich 24.12.) */
@@ -484,23 +486,28 @@
     return g;
   }
   function advImg(day) {
-    if (advCache[day]) return Promise.resolve(advCache[day]);
-    return db.imgGet(advPath(day)).then(function (blob) {
-      return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { advCache[day] = fr.result; res(fr.result); }; fr.onerror = rej; fr.readAsDataURL(blob); });
+    var y = arguments[1] || advYear(), ck = y + "/" + day;
+    if (advCache[ck]) return Promise.resolve(advCache[ck]);
+    return db.imgGet(advPath(day, y)).then(function (blob) {
+      return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { advCache[ck] = fr.result; res(fr.result); }; fr.onerror = rej; fr.readAsDataURL(blob); });
+    });
+  }
+  function advList(y) {
+    return db.imgList(String(y)).then(function (list) {
+      var have = {};
+      list.forEach(function (f) { var m = /^(\d{1,2})\.jpg$/.exec(f.name || ""); if (m && +m[1] >= 1 && +m[1] <= 24) have[+m[1]] = true; });
+      return have;
     });
   }
   function advRefresh() {
-    if (!db || !db.imgList || advToday().m < 11) return Promise.resolve();
-    return db.imgList(String(advYear())).then(function (list) {
-      var have = {};
-      list.forEach(function (f) { var m = /^(\d{1,2})\.jpg$/.exec(f.name || ""); if (m && +m[1] >= 1 && +m[1] <= 24) have[+m[1]] = true; });
-      advHave = have; advListed = true; advSync(); checkPost();
-    }).catch(function () { advListed = false; advSync(); });
+    if (!db || !db.imgList) return Promise.resolve();
+    return advList(advYear()).then(function (have) { advHave = have; advListed = true; advSync(); checkPost(); })
+      .then(function () { if (advEY() !== advYear()) return advList(advEY()).then(function (h2) { advEditHave = h2; }); })
+      .catch(function () { advListed = false; advSync(); });
   }
   function advSync() {
     var btn = $("advbtn"), act = advActive();
     btn.hidden = !act;
-    $("advset").hidden = advToday().m < 11;
     if (act) {
       btn.textContent = "";
       var seen = advSeenGet(), dn0 = advDayNow();
@@ -523,7 +530,8 @@
     setTimeout(checkPost, 300);
   }
   function advKey(e) { if (e.key === "Escape") advClose(); }
-  function advShow(kind, day) {
+  function advShow(kind, day, yr) {
+    var vy = yr || advYear(), HVs = vy === advYear() ? advHave : advEditHave;
     var old = document.getElementById("advov"); if (old) old.remove();
     advOpen = true;
     var ov = h("div", { class: "advov", id: "advov", role: "dialog", "aria-modal": "true", "aria-label": "Adventskalender" });
@@ -545,9 +553,9 @@
       hang.append(h("div", { class: "advframe" }, photo, h("div", { class: "advdate" }, day + ". Dezember")));
       var more = h("button", { class: "advmore", type: "button", onclick: function () { advShow("all"); } }, "Alle Türen ansehen");
       stage.append(wrap, hang); ov.dataset.more = "1"; ov.moreBtn = more;
-      advSeenAdd(day);
-      if (!advHave[day]) photo.firstChild.textContent = "Für diese Tür gibt es noch kein Bild. 🎄";
-      else advImg(day).then(function (url) {
+      if (vy === advYear()) advSeenAdd(day);
+      if (!HVs[day]) photo.firstChild.textContent = "Für diese Tür gibt es noch kein Bild. 🎄";
+      else advImg(day, vy).then(function (url) {
         var im = h("img", { src: url, alt: "Bild für den " + day + ". Dezember" });
         photo.textContent = ""; photo.append(im);
       }).catch(function () { photo.firstChild.textContent = "Das Bild konnte nicht geladen werden."; });
@@ -599,34 +607,54 @@
   }
   function advStat(t) { $("advstat").textContent = t || ""; }
   function advUp(day, file) {
-    return advResize(file).then(function (blob) { return db.imgPut(advPath(day), blob); }).then(function () { advHave[day] = true; delete advCache[day]; });
+    var y = advEY();
+    return advResize(file).then(function (blob) { return db.imgPut(advPath(day, y), blob); }).then(function () { advHaveE()[day] = true; delete advCache[y + "/" + day]; });
   }
   function advUpErr(ex) {
     var m = String(ex && ex.message || ex);
     advStat(/bucket|not found|404/i.test(m) ? "Der Bilderspeicher ist noch nicht eingerichtet. Bitte zuerst das SQL-Update ausführen." : "Hochladen hat nicht geklappt: " + m);
   }
   function advRenderSet() {
-    if (advToday().m < 11) return;
+    if (!advEditYear) advEditYear = advYear();
+    $("advon").checked = lsGet("pp-adv-off") !== "1";
     advRefresh().then(advDrawGrid); advDrawGrid();
   }
   function advDrawGrid() {
     var g = $("advgrid"); g.textContent = "";
+    var HV = advHaveE(), ey = advEY(), cy = advYear();
+    $("advyear").textContent = String(ey);
+    $("advyprev").disabled = ey <= cy - 1; $("advynext").disabled = ey >= cy + 1;
+    $("advwipe").textContent = advWipe ? "Wirklich alle Fotos " + ey + " entfernen?" : "Alle Fotos dieses Jahres entfernen";
     for (var d = 1; d <= 24; d++) (function (d) {
-      g.append(h("button", { class: "advtile" + (advHave[d] ? " has" : "") + (advSel === d ? " sel" : ""), type: "button", "aria-label": d + ". Tür" + (advHave[d] ? ", Foto vorhanden" : ", noch kein Foto"), onclick: function () { advSel = advSel === d ? 0 : d; advDrawGrid(); } }, String(d), advHave[d] ? h("i", null, "✓") : null));
+      g.append(h("button", { class: "advtile" + (HV[d] ? " has" : "") + (advSel === d ? " sel" : ""), type: "button", "aria-label": d + ". Tür" + (HV[d] ? ", Foto vorhanden" : ", noch kein Foto"), onclick: function () { advSel = advSel === d ? 0 : d; advDrawGrid(); } }, String(d), HV[d] ? h("i", null, "✓") : null));
     })(d);
     var pn = $("advpanel"); pn.hidden = !advSel; pn.textContent = "";
     if (!advSel) return;
     var day = advSel;
-    pn.append(h("b", null, day + ". Dezember"),
+    pn.append(h("b", null, day + ". Dezember " + ey),
       h("div", { class: "row" },
-        h("button", { class: "linkbtn", type: "button", onclick: function () { $("advfile").click(); } }, advHave[day] ? "Foto ersetzen" : "Foto wählen"),
-        advHave[day] ? h("button", { class: "linkbtn", type: "button", onclick: function () { advShow("day", day); } }, "Ansehen") : null,
-        advHave[day] ? h("button", { class: "linkbtn danger", type: "button", onclick: function () {
-          db.imgDel(advPath(day)).then(function () { advHave[day] = false; delete advCache[day]; advDrawGrid(); advStat("Foto entfernt."); }).catch(advUpErr);
+        h("button", { class: "linkbtn", type: "button", onclick: function () { $("advfile").click(); } }, HV[day] ? "Foto ersetzen" : "Foto wählen"),
+        HV[day] ? h("button", { class: "linkbtn", type: "button", onclick: function () { advShow("day", day, ey); } }, "Ansehen") : null,
+        HV[day] ? h("button", { class: "linkbtn danger", type: "button", onclick: function () {
+          db.imgDel(advPath(day, ey)).then(function () { HV[day] = false; delete advCache[ey + "/" + day]; advDrawGrid(); advSync(); advStat("Foto entfernt."); }).catch(advUpErr);
         } }, "Entfernen") : null));
   }
   function advWire() {
     $("advbtn").addEventListener("click", function () { advShow("all"); });
+    $("advon").addEventListener("change", function () { lsSet("pp-adv-off", this.checked ? "0" : "1"); advSync(); if (this.checked) checkPost(); });
+    $("advyprev").addEventListener("click", function () { advEditYear = advEY() - 1; advSel = 0; advWipe = false; advStat(""); advRefresh().then(advDrawGrid); advDrawGrid(); });
+    $("advynext").addEventListener("click", function () { advEditYear = advEY() + 1; advSel = 0; advWipe = false; advStat(""); advRefresh().then(advDrawGrid); advDrawGrid(); });
+    $("advwipe").addEventListener("click", function () {
+      if (!db) return;
+      if (!advWipe) { advWipe = true; advDrawGrid(); setTimeout(function () { if (advWipe) { advWipe = false; advDrawGrid(); } }, 6000); return; }
+      advWipe = false; var y = advEY(), HV = advHaveE(), paths = [];
+      for (var d = 1; d <= 24; d++) if (HV[d]) paths.push(advPath(d, y));
+      if (!paths.length) { advStat("Für " + y + " gibt es keine Fotos."); advDrawGrid(); return; }
+      db.imgDel(paths).then(function () {
+        for (var d2 = 1; d2 <= 24; d2++) { HV[d2] = false; delete advCache[y + "/" + d2]; }
+        advStat("Alle Fotos von " + y + " entfernt."); advDrawGrid(); advSync();
+      }).catch(advUpErr);
+    });
     $("advfile").addEventListener("change", function () {
       var f = this.files && this.files[0], day = advSel; this.value = "";
       if (!f || !day || !db) return;
@@ -637,7 +665,7 @@
     $("advmulti").addEventListener("change", function () {
       var fs = Array.prototype.slice.call(this.files || [], 0, 24); this.value = "";
       if (!fs.length || !db || advBusy) return;
-      var free = []; for (var d = 1; d <= 24; d++) if (!advHave[d]) free.push(d);
+      var free = []; for (var d = 1; d <= 24; d++) if (!advHaveE()[d]) free.push(d);
       if (!free.length) { advStat("Alle Türen haben schon ein Foto. Tippe eine Tür an, um ein Foto zu ersetzen."); return; }
       fs = fs.slice(0, free.length); advBusy = true;
       var i = 0;
@@ -1204,6 +1232,7 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 103, t: ["Neue Kategorie „Extras“ in den Einstellungen. Dort liegen jetzt die Adventskalender-Einstellungen, mit Jahresauswahl und Anzeige an/aus."] },
     { v: 102, t: ["Eine kleine Überraschung für den Dezember. 🎄"] },
     { v: 101, t: ["Angebote aus der Tauschbörse kommen jetzt als Brief: Umschlag mit roter Schleife antippen, Brief lesen, annehmen, ablehnen oder auf später verschieben. Der Anbieter bekommt eine Antwort."] },
     { v: 100, t: ["Neu: Tauschbörse im Putzplan. Mit dem 🎁 kannst du bei einer eigenen Aufgabe Bonus-Punkte für den anderen anbieten: höchstens 10 % deiner selbst erarbeiteten Punkte der letzten 30 Tage, höchstens 10 pro Aufgabe. Das Angebot gilt 7 Tage. In der Statistik steht, wer wie viel verschenkt hat."] },

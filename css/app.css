@@ -1134,3 +1134,10 @@ button.giftb { font-family: inherit; cursor: pointer; }
 .advtile i { position: absolute; right: 3px; top: 1px; font-size: 10px; font-style: normal; color: var(--accent); }
 .advpanel { border: 1px solid var(--line, #dfe7e5); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
 @media (prefers-reduced-motion: reduce) { .advov, .advwreath, .advhang, .advbtn.unseen::after, .advtok.fresh, .flame, .advphoto img { animation: none !important; } }
+
+/* Update 103: Extras */
+.setcard .subh { margin: 0; font-size: 1rem; }
+.chk { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; }
+.chk input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.advyear { align-items: center; gap: 12px; }
+.advyear b { min-width: 48px; text-align: center; font-size: 1.1rem; }
