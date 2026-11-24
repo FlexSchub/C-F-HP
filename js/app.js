@@ -1,6 +1,7 @@
 (function () {
   var ROOMS = ["Küche", "Bad", "Wohnzimmer", "Schlafzimmer", "Flur", "Überall"];
   var INTERVALS = [[1, "täglich"], [3, "alle 3 Tage"], [7, "wöchentlich"], [14, "alle 2 Wochen"], [30, "monatlich"], [90, "vierteljährlich"]];
+  var GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.1 5.4 L10.5 2.7 L13.5 2.7 L13.9 5.4 L16.8 7.1 L19.3 6.1 L20.8 8.6 L18.7 10.3 L18.7 13.7 L20.8 15.4 L19.3 17.9 L16.8 16.9 L13.9 18.6 L13.5 21.3 L10.5 21.3 L10.1 18.6 L7.2 16.9 L4.7 17.9 L3.2 15.4 L5.3 13.7 L5.3 10.3 L3.2 8.6 L4.7 6.1 L7.2 7.1z"/><circle cx="12" cy="12" r="2.8"/></svg>';
   var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
   function $(id) { return document.getElementById(id); }
@@ -392,38 +393,48 @@
       burstFrom = check; markDone(t); burstFrom = null;
     } });
     check.innerHTML = CHECK;
+    var gearOn = !!editing[t.id] || confirmDel === t.id;
+    var gear = h("button", { class: "tog gear" + (gearOn ? " on" : ""), type: "button", title: "Aufgabe bearbeiten oder löschen", "aria-label": "Bearbeiten oder löschen: " + t.name, "aria-expanded": gearOn ? "true" : "false", onclick: function () {
+      if (gearOn) { editing[t.id] = false; confirmDel = null; } else { editing[t.id] = true; confirmDel = null; }
+      render();
+    } });
+    gear.innerHTML = GEAR;
     var title = h("button", { class: "title", type: "button", "aria-expanded": isOpen ? "true" : "false", onclick: function () {
       if (open[t.id]) delete open[t.id]; else open[t.id] = true;
       confirmDel = null; render();
     } }, t.name);
     li.append(
       check,
-      h("div", { class: "body" }, title, h("div", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d)),
+      h("div", { class: "body" }, title, h("div", { class: "dueline" },
+        h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who),
+        h("span", { class: "due " + status }, inf.pending ? "fällig" + (t.pendingBy ? " nach „" + t.pendingBy + "“" : "") : inf.demand ? agoText(t.lastDone) : dueText(inf.d))),
         offer ? (offer.by !== me && offer.status !== "accepted"
           ? h("button", { class: "giftb", type: "button", title: "Brief öffnen", onclick: function () { showMail({ k: "offer", t: t, o: offer }); } }, "🎁 +" + offer.pts + " Bonus von " + offer.by + " · Brief öffnen")
           : h("div", { class: "giftb" }, "🎁 +" + offer.pts + (offer.by === me ? " von dir" : " Bonus von " + offer.by) + (offer.status === "accepted" ? " · angenommen" : " · wartet auf Antwort"))) : null),
       h("div", { class: "side" },
         canOffer ? h("button", { class: "tog gift", type: "button", title: "Bonus-Punkte anbieten", "aria-label": "Bonus-Punkte anbieten: " + t.name, onclick: function () { open[t.id] = true; offerFor = t.id; offerPts = 1; confirmDel = null; render(); } }, "🎁") : null,
-        h("span", { class: "chip " + inf.who, title: inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who, "aria-label": inf.who === "egal" ? "Zuständig: egal wer" : "Zuständig: " + inf.who }, inf.who === "egal" ? "F·C" : inf.who),
-        h("button", { class: "tog", type: "button", title: "Zusammen erledigt (beide bekommen die Punkte)", "aria-label": "Zusammen erledigt: " + t.name, onclick: function (ev) { burstFrom = ev.currentTarget; markDone(t, true); burstFrom = null; } }, "👥"))
+        h("button", { class: "tog", type: "button", title: "Zusammen erledigt (beide bekommen die Punkte)", "aria-label": "Zusammen erledigt: " + t.name, onclick: function (ev) { burstFrom = ev.currentTarget; markDone(t, true); burstFrom = null; } }, "👥"),
+        gear)
     );
     if (isOpen) {
-      var last = t.lastDone ? "Zuletzt erledigt von " + (t.lastBy || "?") + " am " + fmt(t.lastDone) + "." : "Noch nie erledigt.";
+      var last = t.lastDone ? "Zuletzt erledigt von " + (t.lastBy || "?") + " am " + fmt(t.lastDone) : "Noch nie erledigt";
       var actions = h("div", { class: "row" });
+      if (offer && offer.by === me) actions.append(h("button", { class: "linkbtn", type: "button", onclick: function () { db.doc("tasks/" + t.id).update({ offer: null }).then(function () { toast("Angebot zurückgezogen."); }).catch(writeFail); } }, "Angebot zurückziehen"));
+      if (blocked && mine && !offer) actions.append(h("span", { class: "hint" }, "Dein letztes Angebot hier wurde abgelehnt. Versuch es bei einer anderen Aufgabe."));
+      li.append(h("div", { class: "more" }, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", null, last), canOffer && offerFor === t.id ? offerForm(t) : null, actions.children.length ? actions : null));
+    }
+    /* Zahnrad: Bearbeiten und Löschen direkt, ohne die Aufgabe vorher zu öffnen */
+    if (gearOn) {
+      var drow = h("div", { class: "row" });
       if (confirmDel === t.id) {
-        actions.append(
+        drow.append(
           h("button", { class: "linkbtn danger", type: "button", onclick: function () { deleteTask(t); } }, "Ja, löschen"),
           h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = null; render(); } }, "Abbrechen")
         );
       } else {
-        if (offer && offer.by === me) actions.append(h("button", { class: "linkbtn", type: "button", onclick: function () { db.doc("tasks/" + t.id).update({ offer: null }).then(function () { toast("Angebot zurückgezogen."); }).catch(writeFail); } }, "Angebot zurückziehen"));
-        if (blocked && mine && !offer) actions.append(h("span", { class: "hint" }, "Dein letztes Angebot hier wurde abgelehnt. Versuch es bei einer anderen Aufgabe."));
-        if (canOffer && offerFor !== t.id) actions.append(h("button", { class: "linkbtn", type: "button", onclick: function () { offerFor = t.id; offerPts = 1; render(); } }, "🎁 Bonus-Punkte anbieten"));
-        actions.append(
-          h("button", { class: "linkbtn", type: "button", onclick: function () { editing[t.id] = !editing[t.id]; render(); } }, editing[t.id] ? "Ändern schließen" : "Name und Rhythmus ändern"),
-          h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = t.id; render(); } }, "Aufgabe löschen"));
+        drow.append(h("button", { class: "linkbtn", type: "button", onclick: function () { confirmDel = t.id; render(); } }, "Aufgabe löschen"));
       }
-      li.append(h("div", { class: "more" }, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", null, last), editing[t.id] ? editForm(t) : null, canOffer && offerFor === t.id ? offerForm(t) : null, actions));
+      li.append(h("div", { class: "gearpanel" }, editing[t.id] ? editForm(t) : null, drow));
     }
     return li;
   }
@@ -845,7 +856,7 @@
       if (!newName) { err.textContent = "Die Aufgabe braucht einen Namen."; return; }
       var upd = { name: newName, intervalDays: days, assignee: who.value, points: pv, follow: Object.keys(fsel).filter(function (k) { return fsel[k]; }) };
       if (who.value === "abwechselnd") upd.turn = t.turn === "C" ? "C" : "F"; else upd.turn = "";
-      db.doc("tasks/" + t.id).update(upd).then(function () { editing[t.id] = false; toast("Gespeichert."); }).catch(writeFail);
+      db.doc("tasks/" + t.id).update(upd).then(function () { editing[t.id] = false; toast("Gespeichert."); render(); }).catch(writeFail);
     } },
       h("label", null, "Name", nm),
       h("label", null, "Wie oft?", sel), cust,
@@ -1232,6 +1243,8 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 105, t: ["Putzplan: Beim Aufklappen steht nach „Zuletzt erledigt“ nur noch ein Punkt statt zwei."] },
+    { v: 104, t: ["Putzplan: Ein Zahnrad in der Kopfzeile jeder Aufgabe öffnet direkt Bearbeiten und Löschen, die Aufgabe muss nicht mehr aufgeklappt werden. Der Knopf „Bonus-Punkte anbieten“ im aufgeklappten Bereich ist entfernt, das 🎁 in der Kopfzeile bleibt.", "Die Aufgabenzeilen sind kompakter: Die Knöpfe stehen nebeneinander statt untereinander."] },
     { v: 103, t: ["Neue Kategorie „Extras“ in den Einstellungen. Dort liegen jetzt die Adventskalender-Einstellungen, mit Jahresauswahl und Anzeige an/aus."] },
     { v: 102, t: ["Eine kleine Überraschung für den Dezember. 🎄"] },
     { v: 101, t: ["Angebote aus der Tauschbörse kommen jetzt als Brief: Umschlag mit roter Schleife antippen, Brief lesen, annehmen, ablehnen oder auf später verschieben. Der Anbieter bekommt eine Antwort."] },

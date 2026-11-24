@@ -1141,3 +1141,31 @@ button.giftb { font-family: inherit; cursor: pointer; }
 .chk input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .advyear { align-items: center; gap: 12px; }
 .advyear b { min-width: 48px; text-align: center; font-size: 1.1rem; }
+
+/* Update 104: kompaktere Aufgabenzeilen, Zahnrad in der Kopfzeile */
+#list { gap: 12px; }
+li.task { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; padding: 5px 10px; align-items: center; }
+li.task .check { width: 34px; height: 34px; min-width: 34px; min-height: 34px; }
+li.task .check svg { width: 18px; height: 18px; }
+li.task .body { gap: 0; padding-top: 0; }
+li.task .title { font-size: 1rem; line-height: 1.25; }
+li.task .due { font-size: 0.82rem; line-height: 1.25; }
+li.task .side { flex-direction: row; align-items: center; justify-content: flex-end; gap: 4px; }
+li.task .side .chip { margin-top: 0; width: 28px; height: 28px; font-size: 0.78rem; flex: none; }
+li.task .side .chip.egal { width: auto; min-width: 28px; padding: 0 6px; }
+li.task .tog { width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; display: grid; place-items: center; font-size: 0.9rem; flex: none; }
+li.task .tog svg { width: 17px; height: 17px; }
+li.task .tog.gear { color: var(--muted); }
+li.task .tog.gear.on, li.task .tog.gear:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+li.task .more { padding-bottom: 4px; }
+li.task .gearpanel { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding: 6px 2px 8px; font-size: 0.88rem; color: var(--muted); }
+li.task .gearpanel .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+li.task .dueline { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+li.task .dueline .chip { margin-top: 0; width: auto; min-width: 22px; height: 20px; padding: 0 7px; border-radius: 10px; font-size: 0.72rem; flex: none; }
+li.task .dueline .chip.egal { padding: 0 7px; }
+li.task .dueline .due { min-width: 0; }
+li.task .dueline { flex-wrap: nowrap; align-items: flex-start; }
+li.task .dueline .chip { margin-top: 1px; }
+li.task .side { gap: 3px; }
+li.task .tog { width: 30px; min-width: 30px; height: 30px; min-height: 30px; }
+li.task .tog svg { width: 16px; height: 16px; }
