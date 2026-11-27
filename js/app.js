@@ -239,6 +239,73 @@
     setTimeout(function () { made.forEach(function (x) { if (x.parentNode) x.parentNode.removeChild(x); }); }, 1000);
   }
 
+  /* Neue Einträge gleiten ein (nur Einträge, die nach dem ersten Laden dazukommen) */
+  var seenIds = {}, seenReady = {};
+  function isNewId(kind, id) {
+    var m = seenIds[kind] = seenIds[kind] || {};
+    var fresh = !!seenReady[kind] && !m[id];
+    m[id] = 1;
+    if (!seenReady[kind]) seenReady[kind] = setTimeout(function () { seenReady[kind] = true; }, 1500);
+    return fresh && seenReady[kind] === true;
+  }
+  /* Konfetti, wenn die letzte fällige Aufgabe des Tages erledigt wurde */
+  function confetti() {
+    if (reducedMotion()) return;
+    var ov = h("div", { class: "bzfw", "aria-hidden": "true" }), cols = ["var(--f)", "var(--c)", "#e9b949", "var(--accent)", "#ffffff"];
+    document.body.append(ov);
+    var W = window.innerWidth;
+    for (var i = 0; i < 44; i++) {
+      var c = h("span", { class: "cfp" });
+      c.style.left = (Math.random() * W).toFixed(0) + "px"; c.style.background = cols[i % cols.length];
+      c.style.setProperty("--sx", ((Math.random() - 0.5) * 120).toFixed(0) + "px");
+      c.style.setProperty("--rt", Math.round(360 + Math.random() * 540) + "deg");
+      c.style.animationDelay = Math.round(Math.random() * 600) + "ms"; c.style.animationDuration = (1800 + Math.random() * 1200).toFixed(0) + "ms";
+      ov.append(c);
+    }
+    setTimeout(function () { ov.remove(); }, 3800);
+  }
+  var prevOpenDue;
+  function dueNow() { return (tasks || []).filter(function (t) { var i = info(t); return !i.demand && i.d <= 0; }).length; }
+  function checkAllDone() {
+    if (tasks === null) return;
+    var n = dueNow(), ts = todayStr();
+    if (prevOpenDue !== undefined && prevOpenDue > 0 && n === 0 && lsGet("pp-conf") !== ts && (section === "putz" || section === "home")) { lsSet("pp-conf", ts); confetti(); }
+    prevOpenDue = n;
+  }
+
+  /* Wischen nach rechts = erledigt */
+  function attachSwipe(li, t, check) {
+    var sx = 0, sy = 0, dx = 0, active = false, horiz = false, LIM = 90;
+    li.addEventListener("pointerdown", function (e) {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (e.target.closest && e.target.closest("input,select,textarea,form")) return;
+      sx = e.clientX; sy = e.clientY; dx = 0; active = true; horiz = false; li.classList.remove("swipeback");
+    });
+    li.addEventListener("pointermove", function (e) {
+      if (!active) return;
+      var mx = e.clientX - sx, my = e.clientY - sy;
+      if (!horiz) {
+        if (Math.abs(my) > 12 && Math.abs(my) > Math.abs(mx)) { active = false; return; }
+        if (mx > 12 && mx > Math.abs(my) * 1.5) { horiz = true; try { li.setPointerCapture(e.pointerId); } catch (x) {} } else return;
+      }
+      dx = Math.max(0, Math.min(mx, 150));
+      li.style.transform = "translateX(" + dx + "px)";
+      li.classList.add("swiping"); li.classList.toggle("swipeok", dx >= LIM);
+    });
+    function end() {
+      if (!active) return;
+      active = false;
+      if (!horiz) return;
+      var go = dx >= LIM;
+      var swallow = function (ev) { ev.stopPropagation(); ev.preventDefault(); };
+      li.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(function () { li.removeEventListener("click", swallow, true); }, 400);
+      li.classList.add("swipeback"); li.classList.remove("swiping", "swipeok"); li.style.transform = "";
+      if (go) { lsSet("pp-swiped", "1"); burstFrom = check; markDone(t); burstFrom = null; }
+    }
+    li.addEventListener("pointerup", end); li.addEventListener("pointercancel", end);
+  }
+
   /* Aktionen */
   function markDone(t, both, who) {
     togetherAsk = null;
@@ -363,7 +430,10 @@
   }
   function deleteTask(t) {
     confirmDel = null;
-    db.doc("tasks/" + t.id).delete().catch(writeFail);
+    var saved = Object.assign({}, t); delete saved.id;
+    db.doc("tasks/" + t.id).delete().then(function () {
+      toast("„" + t.name + "“ gelöscht.", "Rückgängig", function () { db.doc("tasks/" + t.id).set(saved).catch(writeFail); });
+    }).catch(writeFail);
   }
   function removeExamples() {
     var ex = (tasks || []).filter(function (t) { return t.example === true; });
@@ -384,7 +454,7 @@
     if (pointsOf(t) > 1) metaParts.push(pointsOf(t) + " Punkte");
     var fol = (Array.isArray(t.follow) ? t.follow : []).map(function (id) { var x = (tasks || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ""; }).filter(Boolean);
     if (fol.length) metaParts.push("danach: " + fol.join(", "));
-    var li = h("li", { class: "task" });
+    var li = h("li", { class: "task" + (isNewId("task", t.id) ? " glidein" : "") });
     var offer = offerOf(t);
     var mine = !!me && (t.assignee === "egal" || inf.who === me);
     var blocked = !!(t.offerNo && t.offerNo.by === me && dn(todayStr()) - dn(t.offerNo.date) < 7);
@@ -423,6 +493,7 @@
       if (blocked && mine && !offer) actions.append(h("span", { class: "hint" }, "Dein letztes Angebot hier wurde abgelehnt. Versuch es bei einer anderen Aufgabe."));
       li.append(h("div", { class: "more" }, h("div", { class: "meta" }, metaParts.join(" · ")), h("div", null, last), canOffer && offerFor === t.id ? offerForm(t) : null, actions.children.length ? actions : null));
     }
+    attachSwipe(li, t, check);
     /* Zahnrad: Bearbeiten und Löschen direkt, ohne die Aufgabe vorher zu öffnen */
     if (gearOn) {
       var drow = h("div", { class: "row" });
@@ -907,6 +978,7 @@
   function render() {
     $("today").textContent = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
     renderSummary();
+    checkAllDone();
     renderBanner();
     renderNewFollow();
     renderStats();
@@ -928,14 +1000,25 @@
       list.append(h("p", { class: "note" }, "Für " + filter + " ist gerade nichts eingetragen."));
       return;
     }
-    var groups = [
+    var byRoom = lsGet("pp-groupby") === "room";
+    var modeRow = h("div", { class: "row grouprow" }, h("button", { class: "linkbtn", type: "button", onclick: function () { lsSet("pp-groupby", byRoom ? "due" : "room"); render(); } }, byRoom ? "Nach Raum sortiert · ändern" : "Nach Fälligkeit sortiert · ändern"));
+    list.append(modeRow);
+    if (lsGet("pp-swiped") !== "1") list.append(h("p", { class: "hint swipehint" }, "Tipp: Eine Aufgabe nach rechts wischen = erledigt."));
+    var groups;
+    if (byRoom) {
+      var rooms = {};
+      shown.forEach(function (x) { var r = String(x.t.room || "").trim() || "Überall"; (rooms[r] = rooms[r] || []).push(x); });
+      groups = Object.keys(rooms).sort(function (a, b) { return a === "Überall" ? 1 : b === "Überall" ? -1 : a.localeCompare(b, "de"); }).map(function (r) {
+        return ["Raum: " + r, function (d, x) { return (String(x.t.room || "").trim() || "Überall") === r; }];
+      });
+    } else groups = [
       ["Heute und überfällig", function (d) { return d <= 0; }],
       ["Nach Bedarf", function (d) { return d >= DEMAND; }],
       ["Diese Woche", function (d) { return d >= 1 && d <= 7; }],
       ["Später", function (d) { return d > 7 && d < DEMAND; }]
     ];
     groups.forEach(function (g) {
-      var items = shown.filter(function (x) { return g[1](x.d); });
+      var items = shown.filter(function (x) { return g[1](x.d, x); });
       if (!items.length) return;
       var ul = h("ul", { class: "tasks" });
       items.forEach(function (x) { ul.append(row(x.t)); });
@@ -1081,7 +1164,20 @@
     }
     return "Sonstiges";
   }
-  function aisleOf(it) { return AISLES.indexOf(it.aisle) >= 0 ? it.aisle : guessAisle(it.name); }
+  /* Gänge gehören zum Laden (stores/<id>.aisles); ohne eigene Liste gilt die Standardliste */
+  function aislesFor(sid) {
+    var st = (stores || []).filter(function (x) { return x.id === sid; })[0];
+    return st && Array.isArray(st.aisles) && st.aisles.length ? st.aisles : AISLES;
+  }
+  function normAisle(sid, a, name) {
+    var L = aislesFor(sid);
+    if (L.indexOf(a) >= 0) return a;
+    var g = guessAisle(name);
+    if (L.indexOf(g) >= 0) return g;
+    return L.indexOf("Sonstiges") >= 0 ? "Sonstiges" : "Ohne Gang";
+  }
+  function aislesShown(sid) { var L = aislesFor(sid); return L.indexOf("Sonstiges") >= 0 ? L : L.concat(["Ohne Gang"]); }
+  function aisleOf(it) { return normAisle(it.store, it.aisle, it.name); }
   var QTY_UNITS = "kg|mg|g|ml|cl|liter|l|stück|stk|st|pckg|pck|pkg|packungen|packung|pack|dosen|dose|bund|becher|flaschen|flasche|gläser|glas|tüten|tüte|rollen|rolle|kasten|x|×";
   var QTY_RE = new RegExp("^(\\d+(?:[.,]\\d+)?)\\s*(" + QTY_UNITS + ")?\\.?\\s+(\\S.*)$", "i");
   function parseItem(text) {
@@ -1117,6 +1213,51 @@
     db.doc("stores/" + st.id).update({ hist: hist.slice(0, 30) }).catch(function () {});
   }
   var editItemId = null, doneEdit = false, chipEdit = null;
+  var aisleEdit = null, aisleEditFor = "";   // Entwurf beim Bearbeiten der Gänge: [{ name, orig }]
+  function startAisleEdit(st) { aisleEditFor = st.id; aisleEdit = aislesFor(st.id).map(function (n) { return { name: n, orig: n }; }); }
+  function saveAisles(st) {
+    var seen = {}, names = [], ren = {};
+    aisleEdit.forEach(function (e) {
+      var n = e.name.trim().slice(0, 40);
+      if (!n || seen[n.toLowerCase()]) return;
+      seen[n.toLowerCase()] = true; names.push(n);
+      if (e.orig && e.orig !== n) ren[e.orig] = n;
+    });
+    if (!names.length) { toast("Es braucht mindestens einen Gang."); return; }
+    var upd = { aisles: names };
+    if (Array.isArray(st.hist) && Object.keys(ren).length) upd.hist = st.hist.map(function (x) { return ren[x.a] ? Object.assign({}, x, { a: ren[x.a] }) : x; });
+    var mine = items.filter(function (i) { return i.store === st.id; });
+    var moves = mine.filter(function (i) { return ren[aisleOf(i)]; }).map(function (i) { return [i.id, ren[aisleOf(i)]]; });
+    db.doc("stores/" + st.id).update(upd).then(function () {
+      moves.forEach(function (m) { db.doc("shop/" + m[0]).update({ aisle: m[1] }).catch(writeFail); });
+      aisleEdit = null; renderShop(); toast("Gänge gespeichert.");
+    }).catch(writeFail);
+  }
+  function aisleEditor(st) {
+    var box = h("section", { class: "panel aisleed" }, h("h2", null, "Gänge in " + st.name),
+      h("p", { class: "hint" }, "So ist der Laden aufgebaut. Die Liste folgt dieser Reihenfolge. Mit den Pfeilen verschieben, den Namen antippen zum Ändern."));
+    var ul = h("ul", { class: "aislelist" });
+    aisleEdit.forEach(function (e, i) {
+      var inp = h("input", { type: "text", maxlength: "40", value: e.name, "aria-label": "Name des Gangs " + (i + 1) });
+      inp.addEventListener("input", function () { e.name = inp.value; });
+      var mv = function (d) { return function () { var j = i + d; if (j < 0 || j >= aisleEdit.length) return; var t = aisleEdit[i]; aisleEdit[i] = aisleEdit[j]; aisleEdit[j] = t; renderShop(); }; };
+      ul.append(h("li", null,
+        h("button", { class: "aup", type: "button", "aria-label": e.name + " nach oben", disabled: i === 0, onclick: mv(-1) }, "▲"),
+        h("button", { class: "aup", type: "button", "aria-label": e.name + " nach unten", disabled: i === aisleEdit.length - 1, onclick: mv(1) }, "▼"),
+        inp,
+        h("button", { class: "x", type: "button", "aria-label": e.name + " entfernen", onclick: function () { aisleEdit.splice(i, 1); renderShop(); } }, "×")));
+    });
+    box.append(ul);
+    var nw = h("input", { type: "text", maxlength: "40", placeholder: "Neuer Gang, z. B. Backzutaten", "aria-label": "Neuer Gang" });
+    var add = function () { var v = nw.value.trim(); if (!v) return; aisleEdit.push({ name: v, orig: "" }); renderShop(); };
+    nw.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); add(); } });
+    box.append(h("div", { class: "aisleadd" }, nw, h("button", { class: "linkbtn", type: "button", onclick: add }, "+ Hinzufügen")));
+    box.append(h("div", { class: "row" },
+      h("button", { class: "primary", type: "button", onclick: function () { saveAisles(st); } }, "Speichern"),
+      h("button", { class: "linkbtn", type: "button", onclick: function () { aisleEdit = null; renderShop(); } }, "Abbrechen"),
+      h("button", { class: "linkbtn", type: "button", onclick: function () { aisleEdit = AISLES.map(function (n) { return { name: n, orig: aislesFor(st.id).indexOf(n) >= 0 ? n : "" }; }); renderShop(); } }, "Standard-Gänge")));
+    return box;
+  }
   function histChange(storeId, oldName, newName, aisle) {
     var st = (stores || []).filter(function (x) { return x.id === storeId; })[0];
     if (!st || !db) return;
@@ -1243,6 +1384,8 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 107, t: ["Neu: Gänge im Einkauf. Unter „Gänge bearbeiten“ legt ihr für jeden Laden eigene Gänge an, benennt sie um, löscht sie und ändert die Reihenfolge.", "Putzplan: Aufgaben nach rechts wischen = erledigt. Gelöschte Aufgaben und Artikel lassen sich mit „Rückgängig“ zurückholen.", "Putzplan: Umschalter „Nach Fälligkeit / Nach Raum“.", "Heute: Karte mit Fortschrittsring und Konfetti, wenn alles erledigt ist. Dazu ein „+“ zum schnellen Hinzufügen von Aufgabe, Termin, Ausgabe oder Artikel.", "Kleine Verschönerungen: Symbole in leeren Listen, weichere Karten, neue Einträge gleiten ein."] },
+    { v: 106, t: ["Bus!: Wenn jemand die Ziellinie erreicht, gibt es jetzt ein kleines Feuerwerk. 🎆"] },
     { v: 105, t: ["Putzplan: Beim Aufklappen steht nach „Zuletzt erledigt“ nur noch ein Punkt statt zwei."] },
     { v: 104, t: ["Putzplan: Ein Zahnrad in der Kopfzeile jeder Aufgabe öffnet direkt Bearbeiten und Löschen, die Aufgabe muss nicht mehr aufgeklappt werden. Der Knopf „Bonus-Punkte anbieten“ im aufgeklappten Bereich ist entfernt, das 🎁 in der Kopfzeile bleibt.", "Die Aufgabenzeilen sind kompakter: Die Knöpfe stehen nebeneinander statt untereinander."] },
     { v: 103, t: ["Neue Kategorie „Extras“ in den Einstellungen. Dort liegen jetzt die Adventskalender-Einstellungen, mit Jahresauswahl und Anzeige an/aus."] },
@@ -1334,7 +1477,13 @@
     document.addEventListener("keydown", onKey);
     ok.focus();
   }
-  function delItem(it) { if (db) db.doc("shop/" + it.id).delete().catch(writeFail); }
+  function delItem(it) {
+    if (!db) return;
+    var saved = Object.assign({}, it); delete saved.id;
+    db.doc("shop/" + it.id).delete().then(function () {
+      toast("„" + it.name + "“ entfernt.", "Rückgängig", function () { db.doc("shop/" + it.id).set(saved).catch(writeFail); });
+    }).catch(writeFail);
+  }
   function addItems(text) {
     if (!db || !curStore) { toast("Keine Verbindung zum Speicher. Bitte lade die Seite neu und melde dich an."); return; }
     var seen = {};
@@ -1388,7 +1537,7 @@
     var q = h("input", { type: "text", maxlength: "20", placeholder: "Menge", value: it.qty || "", "aria-label": "Menge" });
     var n = h("input", { type: "text", maxlength: "80", value: it.name, "aria-label": "Artikel", required: true });
     var a = h("select", { "aria-label": "Gang im Laden" });
-    AISLES.forEach(function (x) { a.append(h("option", { value: x, selected: x === aisleOf(it) }, x)); });
+    aislesFor(it.store).forEach(function (x) { a.append(h("option", { value: x, selected: x === aisleOf(it) }, x)); });
     var sib = siblings(it), want = {};
     sib.forEach(function (i) { want[i.store] = true; });
     var others = (stores || []).filter(function (x) { return x.id !== it.store; });
@@ -1511,6 +1660,8 @@
     }
     if (!st) return;
 
+    if (aisleEdit && aisleEditFor !== st.id) aisleEdit = null;
+    if (aisleEdit) { body.append(aisleEditor(st)); return; }
     var mine = items.filter(function (i) { return i.store === st.id; });
     var open = mine.filter(function (i) { return !i.done; }).sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
     var openKeys = {}; open.forEach(function (i) { openKeys[String(i.name).toLowerCase()] = true; });
@@ -1518,7 +1669,7 @@
     /* Chips nach Gang im Markt gruppieren (Apfel unter Obst & Gemüse) */
     var chipsByAisle = function (entries, cls) {
       var wrap = h("div", { class: cls || "aislechips" });
-      AISLES.forEach(function (ai) {
+      aislesShown(st.id).forEach(function (ai) {
         var part = entries.filter(function (e) { return e.aisle === ai; });
         if (!part.length) return;
         wrap.append(h("p", { class: "slabel2" }, ai));
@@ -1537,7 +1688,7 @@
     var chipForm = function (name, withAisle, aisle0, onSave) {
       var n = h("input", { type: "text", maxlength: "60", value: name, "aria-label": "Name", required: true });
       var a = null;
-      if (withAisle) { a = h("select", { "aria-label": "Gang im Laden" }); AISLES.forEach(function (x) { a.append(h("option", { value: x, selected: x === aisle0 }, x)); }); }
+      if (withAisle) { a = h("select", { "aria-label": "Gang im Laden" }); aislesFor(st.id).forEach(function (x) { a.append(h("option", { value: x, selected: x === aisle0 }, x)); }); }
       var save = function () { var v = n.value.trim(); if (!v) { toast("Es braucht einen Namen."); return; } chipEdit = null; onSave(v, a ? a.value : ""); renderShop(); };
       n.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); save(); } });
       var f = h("div", { class: "chipform" }, n);
@@ -1561,17 +1712,17 @@
     var hasStock = stockList.length > 0 || otherStock.length > 0;
     var favEl = null, stockEl = null;
     if (favs.length) {
-      favEl = chipsByAisle(favs.map(function (x) { return { name: x.n, aisle: AISLES.indexOf(x.a) >= 0 ? x.a : guessAisle(x.n), go: function () { putMulti(st.id, x.n, x.a); },
+      favEl = chipsByAisle(favs.map(function (x) { return { name: x.n, aisle: normAisle(st.id, x.a, x.n), go: function () { putMulti(st.id, x.n, x.a); },
         key: "fav:" + x.n, edit: true,
         del: function () { histChange(st.id, x.n, ""); },
-        form: function () { return chipForm(x.n, true, AISLES.indexOf(x.a) >= 0 ? x.a : guessAisle(x.n), function (v, ai) { histChange(st.id, x.n, v, ai); }); } }; }), "aislechips favrow");
+        form: function () { return chipForm(x.n, true, normAisle(st.id, x.a, x.n), function (v, ai) { histChange(st.id, x.n, v, ai); }); } }; }), "aislechips favrow");
     }
     if (hasStock) {
       stockEl = h("details", { class: "stockbox" }, h("summary", null, "Vorrat", h("span", { class: "n" }, String(stockFree.length))));
       stockEl.open = doneEdit || lsGet("pp-stockopen") === "1";
       stockEl.addEventListener("toggle", function () { if (!doneEdit) lsSet("pp-stockopen", stockEl.open ? "1" : "0"); });
       if (stockFree.length) {
-        stockEl.append(chipsByAisle(stockFree.map(function (n) { return { name: n, aisle: guessAisle(n), go: function () { putMulti(st.id, n); },
+        stockEl.append(chipsByAisle(stockFree.map(function (n) { return { name: n, aisle: normAisle(st.id, "", n), go: function () { putMulti(st.id, n); },
           key: "stock:" + n, edit: true,
           del: function () { stockChange(n, ""); toast("„" + n + "“ ist nicht mehr als „Immer da“ markiert."); },
           form: function () { return chipForm(n, false, "", function (v) { stockChange(n, v); }); } }; })));
@@ -1585,8 +1736,10 @@
       body.append(h("div", { class: "empty" },
         h("b", null, mine.length ? "Alles für " + st.name + " eingekauft" : "Noch nichts für " + st.name),
         h("span", null, mine.length ? "Tippe unten auf einen Artikel, um ihn wieder auf die Liste zu setzen." : "Schreib oben den ersten Artikel hinein. Mehrere gehen mit Komma: Milch, Brot, Butter.")));
+      body.append(h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: function () { startAisleEdit(st); renderShop(); } }, "Gänge bearbeiten")));
     } else {
       var sortRow = h("div", { class: "row" }, h("button", { class: "linkbtn", type: "button", onclick: function () { aisleSort = !aisleSort; lsSet("pp-aisle", aisleSort ? "on" : "off"); renderShop(); } }, aisleSort ? "Sortiert nach Gang im Laden · ändern" : "Sortiert nach Hinzufügen · ändern"));
+      sortRow.append(h("button", { class: "linkbtn", type: "button", onclick: function () { startAisleEdit(st); renderShop(); } }, "Gänge bearbeiten"));
       body.append(sortRow);
       var mkRow = function (it) {
         var chk = h("button", { class: "check", type: "button", "aria-label": "Gekauft: " + it.name, onclick: function () {
@@ -1604,7 +1757,7 @@
           h("button", { class: "x", type: "button", "aria-label": it.name + " von der Liste entfernen", onclick: function () { delItem(it); } }, "×"));
       };
       if (aisleSort) {
-        AISLES.forEach(function (a) {
+        aislesShown(st.id).forEach(function (a) {
           var part = open.filter(function (i) { return aisleOf(i) === a; });
           if (!part.length) return;
           var ul2 = h("ul", { class: "items" });
@@ -1705,7 +1858,7 @@
       if (sum || grp) { db.doc("shop/" + ex.id).update(upd1).catch(writeFail); return sum ? "merged" : "dup"; }
       return "dup";
     }
-    var doc = { store: storeId, name: name, qty: qty, aisle: AISLES.indexOf(aisleHint) >= 0 ? aisleHint : guessAisle(name), done: false, by: me || "", at: Date.now() };
+    var doc = { store: storeId, name: name, qty: qty, aisle: normAisle(storeId, aisleHint, name), done: false, by: me || "", at: Date.now() };
     if (grp) doc.grp = grp;
     db.collection("shop").add(doc).catch(writeFail);
     return "added";
@@ -2815,7 +2968,7 @@
   }
   function evRow(e, onOpen) {
     var w = evWho(e);
-    return h("button", { class: "evrow " + w, type: "button", onclick: onOpen || function () { openEv(e, null); } },
+    return h("button", { class: "evrow " + w + (e.id && isNewId("ev", e.id + (e.occDate || "")) ? " glidein" : ""), type: "button", onclick: onOpen || function () { openEv(e, null); } },
       h("span", { class: "evtop" }, h("span", { class: "evtime" }, evTimeText(e)), h("span", { class: "evwho " + w }, WHO_NAMES[w])),
       h("span", { class: "evtitle" }, e.title || "Termin"),
       e.place ? h("span", { class: "evplace" }, e.place) : null);
@@ -3386,13 +3539,59 @@
     if (t.slot === "abend") pool = pool.concat(SAY_EVENING, SAY_EVENING);
     return seedPick(pool, "s" + todayStr() + t.slot + (me || ""));
   }
+  /* Schnell hinzufügen */
+  function closeQuick() { var o = document.getElementById("qaov"); if (o) o.remove(); }
+  function openQuick() {
+    closeQuick();
+    var ov = h("div", { class: "qaov", id: "qaov", onclick: function (e) { if (e.target === ov) closeQuick(); } });
+    var sheet = h("div", { class: "qasheet", role: "dialog", "aria-label": "Schnell hinzufügen" }, h("h2", null, "Schnell hinzufügen"));
+    var btn = function (ico, txt, fn) { return h("button", { class: "qabtn", type: "button", onclick: function () { closeQuick(); fn(); } }, h("span", { "aria-hidden": "true" }, ico), txt); };
+    var grid = h("div", { class: "qagrid" },
+      btn("🧹", "Aufgabe", function () { goSection("putz", function () { var b = $("addbox"); if (b) { b.open = true; var n = $("newname"); if (n) n.focus(); } }); }),
+      btn("📅", "Termin", function () { goSection("cal", function () { openEv(null, todayStr()); }); }),
+      btn("💶", "Ausgabe", function () {
+        if (!(budgets || []).length) { goSection("spend"); toast("Lege zuerst ein Budget an."); return; }
+        goSection("spend", function () { spendOpen = true; renderSpend(); var a = $("samount"); if (a) a.focus(); });
+      }));
+    sheet.append(grid);
+    var sts = sortedStores();
+    if (sts.length) {
+      var inp = h("input", { type: "text", placeholder: "Einkauf: z. B. Milch, Brot", "aria-label": "Artikel für den Einkauf", maxlength: "200" });
+      var sel = h("select", { "aria-label": "Laden" });
+      sts.forEach(function (x) { sel.append(h("option", { value: x.id, selected: x.id === curStore }, x.name)); });
+      var add = function () { var v = inp.value.trim(); if (!v) return; curStore = sel.value; lsSet("pp-store", curStore); addItems(v); closeQuick(); toast("Auf die Einkaufsliste gesetzt."); };
+      inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } });
+      sheet.append(h("div", { class: "qashop" }, h("span", { class: "slabel" }, "🛒 Einkauf"), inp, sel, h("button", { class: "primary", type: "button", onclick: add }, "Hinzufügen")));
+    } else sheet.append(h("div", { class: "qagrid" }, btn("🛒", "Einkauf", function () { goSection("shop"); })));
+    sheet.append(h("button", { class: "linkbtn", type: "button", onclick: closeQuick }, "Schließen"));
+    ov.append(sheet); document.body.append(ov);
+  }
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeQuick(); });
   function renderHome() {
     var box = $("homemain");
     box.replaceChildren();
     $("homehead").textContent = greetText();
+    if (!$("homefab")) { var fab = h("button", { class: "fab", id: "homefab", type: "button", "aria-label": "Schnell hinzufügen", onclick: openQuick }, "+"); $("homeview").append(fab); }
     $("homesaying").textContent = dbMissing ? "" : sayingText();
     if (dbMissing) { box.append(h("div", { class: "banner" }, h("p", null, connText()))); return; }
     var today = dn(todayStr()), ts = todayStr();
+    checkAllDone();
+
+    /* Überblick: Fortschrittsring */
+    if (tasks !== null) {
+      var openN = dueNow(), seenT = {};
+      (logs || []).forEach(function (l) { if (l.date === ts && l.taskId) seenT[l.taskId] = 1; });
+      var doneN = Object.keys(seenT).length, totalN = doneN + openN, frac = totalN ? doneN / totalN : 1;
+      var ring = svgEl("svg", { viewBox: "0 0 44 44", width: "64", height: "64", "aria-hidden": "true", "class": "ovring" });
+      ring.append(svgEl("circle", { cx: "22", cy: "22", r: "18", fill: "none", "stroke-width": "5", "class": "ovbg" }));
+      var arc = svgEl("circle", { cx: "22", cy: "22", r: "18", fill: "none", "stroke-width": "5", "stroke-linecap": "round", "class": "ovfg",
+        "stroke-dasharray": (frac * 113.1).toFixed(1) + " 113.1", transform: "rotate(-90 22 22)" });
+      ring.append(arc);
+      var evN = eventsLoaded ? eventsOn(ts).length : 0;
+      var big = !tasks.length ? "Noch keine Aufgaben" : openN === 0 ? "Alles erledigt 🎉" : openN === 1 ? "1 Aufgabe offen" : openN + " Aufgaben offen";
+      var small = (totalN ? doneN + " von " + totalN + " heute geschafft" : "Heute ist nichts fällig") + (evN ? " · " + evN + (evN === 1 ? " Termin" : " Termine") : "");
+      box.append(h("section", { class: "panel overview" }, ring, h("div", { class: "ovtxt" }, h("b", null, big), h("span", null, small))));
+    }
 
     /* Termine */
     if (eventsLoaded) {
@@ -3807,7 +4006,7 @@
       var ul = h("ul", { class: "spends" });
       rows.forEach(function (s) {
         var meta = [String(s.category || "").trim() || "Sonstiges", s.place, s.date ? fmt(s.date) : "", repeatText(s) ? "↻ " + repeatText(s) : ""].filter(Boolean).join(" · ");
-        ul.append(h("li", null,
+        ul.append(h("li", { class: isNewId("spend", s.id) ? "glidein" : "" },
           h("span", { class: "sw" }, s.what || String(s.category || "").trim() || "Ausgabe"),
           h("span", { class: "sa" }, eur(s.amount || 0)),
           h("button", { class: "x", type: "button", "aria-label": "Ausgabe löschen", onclick: function () { delSpend(s); } }, "×"),
@@ -4403,6 +4602,34 @@
       l.road.append(sp); (function (n) { setTimeout(function () { n.remove(); }, 800); })(sp);
     }
   }
+  /* Feuerwerk bei Tagessieg */
+  var busWinPrev;                    // undefined = noch nicht geprüft (kein Feuerwerk beim Öffnen), null = kein Sieger
+  function busFireworks(who) {
+    var cols = who === "F" ? ["var(--f)", "#e9b949", "#ffffff", "#ff8a65"] : who === "C" ? ["var(--c)", "#e9b949", "#ffffff", "#ba68c8"] : ["#e9b949", "#e53935", "#1f7a6b", "#ffffff"];
+    var ov = h("div", { class: "bzfw", "aria-hidden": "true" });
+    document.body.append(ov);
+    function burst(x, y, n) {
+      var c = cols[Math.floor(Math.random() * cols.length)];
+      var rocket = h("span", { class: "bzrocket" });
+      rocket.style.left = x + "px"; rocket.style.top = y + "px"; rocket.style.background = c;
+      ov.append(rocket);
+      setTimeout(function () {
+        rocket.remove();
+        var glow = h("span", { class: "bzglow" }); glow.style.left = x + "px"; glow.style.top = y + "px"; glow.style.background = c; ov.append(glow);
+        for (var i = 0; i < n; i++) {
+          var a = (i / n) * Math.PI * 2 + Math.random() * 0.2, r = 50 + Math.random() * 55, sp = h("span", { class: "bzfws" });
+          sp.style.left = x + "px"; sp.style.top = y + "px"; sp.style.background = cols[(i + Math.floor(Math.random() * 2)) % cols.length];
+          sp.style.setProperty("--dx", (Math.cos(a) * r).toFixed(0) + "px"); sp.style.setProperty("--dy", (Math.sin(a) * r).toFixed(0) + "px");
+          ov.append(sp);
+        }
+      }, 450);
+    }
+    var W = window.innerWidth, H = window.innerHeight;
+    for (var k = 0; k < 6; k++) (function (k) {
+      setTimeout(function () { burst(W * (0.15 + Math.random() * 0.7), H * (0.15 + Math.random() * 0.3), 26 + Math.floor(Math.random() * 10)); }, k * 380);
+    })(k);
+    setTimeout(function () { ov.remove(); }, 4200);
+  }
   function busPlace(id, pos, back) {
     var l = busLanes[id], w = l.road.clientWidth, trackW = w - 44, busW = 46;
     var left = pos / BZ_GOAL * (trackW - busW) + 2;
@@ -4415,7 +4642,7 @@
   }
   function busRenderRace() {
     var ts = todayStr(), ids = bzPlayers(ts), host = $("buslanes");
-    if (busDay !== ts) { Object.keys(busLanes).forEach(function (id) { busLanes[id].box.remove(); delete busLanes[id]; delete busShown[id]; }); busDay = ts; }
+    if (busDay !== ts) { Object.keys(busLanes).forEach(function (id) { busLanes[id].box.remove(); delete busLanes[id]; delete busShown[id]; }); busDay = ts; busWinPrev = undefined; }
     Object.keys(busLanes).forEach(function (id) { if (ids.indexOf(id) < 0) { busLanes[id].box.remove(); delete busLanes[id]; delete busShown[id]; } });
     ids.forEach(function (id) { if (!busLanes[id]) host.append(busBuildLane(id)); });
     var list = bzDayEvents(ts), r = bzReplay(list, ids);
@@ -4440,6 +4667,8 @@
         l.flat.append("🔧 Platten! Noch " + p.debt + " richtige Punkte" + (blocks > 1 ? " (" + blocks + " Platten)" : "") + ", dann fährt der Bus weiter.", dots);
       }
     });
+    if (busWinPrev !== undefined && !busWinPrev && r.winner) busFireworks(r.winner);
+    busWinPrev = r.winner || null;
     var wb = $("buswin");
     wb.className = "bzbanner" + (r.winner ? " show " + bzCls(r.winner) : "");
     wb.textContent = r.winner ? "🏁 " + bzName(r.winner) + " gewinnt den Tag! Gezählt wird trotzdem weiter." : "";
