@@ -1205,12 +1205,8 @@ li.task.swiping { transition: none; background: color-mix(in srgb, var(--accent)
 li.task.swipeok { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 li.task.swipeback { transition: transform .2s ease-out, background .2s; }
 .swipehint { margin: 0 0 6px; }
-.grouprow { justify-content: flex-end; }
 /* Überblick auf Heute */
 .overview { flex-direction: row; align-items: center; gap: 16px; }
-.ovring { flex: none; }
-.ovbg { stroke: var(--line-strong); }
-.ovfg { stroke: var(--accent); transition: stroke-dasharray .6s ease; }
 .ovtxt { display: flex; flex-direction: column; gap: 2px; }
 .ovtxt b { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; }
 .ovtxt span { color: var(--muted); font-size: .92rem; }

@@ -1000,18 +1000,8 @@
       list.append(h("p", { class: "note" }, "Für " + filter + " ist gerade nichts eingetragen."));
       return;
     }
-    var byRoom = lsGet("pp-groupby") === "room";
-    var modeRow = h("div", { class: "row grouprow" }, h("button", { class: "linkbtn", type: "button", onclick: function () { lsSet("pp-groupby", byRoom ? "due" : "room"); render(); } }, byRoom ? "Nach Raum sortiert · ändern" : "Nach Fälligkeit sortiert · ändern"));
-    list.append(modeRow);
     if (lsGet("pp-swiped") !== "1") list.append(h("p", { class: "hint swipehint" }, "Tipp: Eine Aufgabe nach rechts wischen = erledigt."));
-    var groups;
-    if (byRoom) {
-      var rooms = {};
-      shown.forEach(function (x) { var r = String(x.t.room || "").trim() || "Überall"; (rooms[r] = rooms[r] || []).push(x); });
-      groups = Object.keys(rooms).sort(function (a, b) { return a === "Überall" ? 1 : b === "Überall" ? -1 : a.localeCompare(b, "de"); }).map(function (r) {
-        return ["Raum: " + r, function (d, x) { return (String(x.t.room || "").trim() || "Überall") === r; }];
-      });
-    } else groups = [
+    var groups = [
       ["Heute und überfällig", function (d) { return d <= 0; }],
       ["Nach Bedarf", function (d) { return d >= DEMAND; }],
       ["Diese Woche", function (d) { return d >= 1 && d <= 7; }],
@@ -1384,6 +1374,8 @@
   }
   /* Neuigkeiten: pro Update ein Eintrag (neueste zuerst). Beim ersten Öffnen nach einem Update erscheint ein Fenster. */
   var CHANGELOG = [
+    { v: 109, t: ["Die Überblick-Karte oben auf Heute ist wieder entfernt."] },
+    { v: 108, t: ["Der Umschalter „Nach Raum“ im Putzplan und der Fortschrittskreis auf Heute sind wieder entfernt."] },
     { v: 107, t: ["Neu: Gänge im Einkauf. Unter „Gänge bearbeiten“ legt ihr für jeden Laden eigene Gänge an, benennt sie um, löscht sie und ändert die Reihenfolge.", "Putzplan: Aufgaben nach rechts wischen = erledigt. Gelöschte Aufgaben und Artikel lassen sich mit „Rückgängig“ zurückholen.", "Putzplan: Umschalter „Nach Fälligkeit / Nach Raum“.", "Heute: Karte mit Fortschrittsring und Konfetti, wenn alles erledigt ist. Dazu ein „+“ zum schnellen Hinzufügen von Aufgabe, Termin, Ausgabe oder Artikel.", "Kleine Verschönerungen: Symbole in leeren Listen, weichere Karten, neue Einträge gleiten ein."] },
     { v: 106, t: ["Bus!: Wenn jemand die Ziellinie erreicht, gibt es jetzt ein kleines Feuerwerk. 🎆"] },
     { v: 105, t: ["Putzplan: Beim Aufklappen steht nach „Zuletzt erledigt“ nur noch ein Punkt statt zwei."] },
@@ -3576,22 +3568,6 @@
     if (dbMissing) { box.append(h("div", { class: "banner" }, h("p", null, connText()))); return; }
     var today = dn(todayStr()), ts = todayStr();
     checkAllDone();
-
-    /* Überblick: Fortschrittsring */
-    if (tasks !== null) {
-      var openN = dueNow(), seenT = {};
-      (logs || []).forEach(function (l) { if (l.date === ts && l.taskId) seenT[l.taskId] = 1; });
-      var doneN = Object.keys(seenT).length, totalN = doneN + openN, frac = totalN ? doneN / totalN : 1;
-      var ring = svgEl("svg", { viewBox: "0 0 44 44", width: "64", height: "64", "aria-hidden": "true", "class": "ovring" });
-      ring.append(svgEl("circle", { cx: "22", cy: "22", r: "18", fill: "none", "stroke-width": "5", "class": "ovbg" }));
-      var arc = svgEl("circle", { cx: "22", cy: "22", r: "18", fill: "none", "stroke-width": "5", "stroke-linecap": "round", "class": "ovfg",
-        "stroke-dasharray": (frac * 113.1).toFixed(1) + " 113.1", transform: "rotate(-90 22 22)" });
-      ring.append(arc);
-      var evN = eventsLoaded ? eventsOn(ts).length : 0;
-      var big = !tasks.length ? "Noch keine Aufgaben" : openN === 0 ? "Alles erledigt 🎉" : openN === 1 ? "1 Aufgabe offen" : openN + " Aufgaben offen";
-      var small = (totalN ? doneN + " von " + totalN + " heute geschafft" : "Heute ist nichts fällig") + (evN ? " · " + evN + (evN === 1 ? " Termin" : " Termine") : "");
-      box.append(h("section", { class: "panel overview" }, ring, h("div", { class: "ovtxt" }, h("b", null, big), h("span", null, small))));
-    }
 
     /* Termine */
     if (eventsLoaded) {
